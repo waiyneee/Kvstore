@@ -4,27 +4,27 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"github.com/waiyneee/Kvstore/server"
+	
+	
+
 )
 
 func main(){
 
-
-	fmt.Println("Started entry poitn for Kvstores initialization ")
-
-
-
 	//go run main.go port(6379 preferably)
-	if len(os.Args)<2{
+	arguments:=os.Args
+	if len(arguments)<2{
 		//failure 
 		//use log instaed of printff later on 
-		fmt.Printf("we got an unexpected length of args here ")
+		fmt.Printf("we got an unexpected length of args here define your port number please ")
 		//telling os to exit 
 		os.Exit(1)
 
 
 	}
 
-	//LETS STARTS
+	
 	port:=fmt.Sprintf(":%s",os.Args[1])
 
 	lstnr,err:=net.Listen("tcp",port)
@@ -36,13 +36,29 @@ func main(){
 	}
 
 	defer lstnr.Close()
-	// fmt.Printf("listenign to :%s\n",lstnr.Addr())
+	fmt.Println("listenign to the server on a specific port ",lstnr.Addr())
 
-	// for{
-	// 	conn,err:=lstnr.Accept()
+	for{
 
-	// }
+		conn,err:=lstnr.Accept()
+		if err!=nil{
+			fmt.Println("failed to get connection ,err:",err)
 
+			continue
+
+		}
+
+		go server.HandleConnections(conn)
+
+		//go automatically gives us concurrency 
+		//through goroutine no need of system calls 
+		//we can make this gracefull handling 
+
+
+
+
+	}
+  
 
 
 }
