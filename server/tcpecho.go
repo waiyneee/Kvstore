@@ -1,7 +1,6 @@
 package server
 
 import (
-
 	"fmt"
 	"net"
 
@@ -10,11 +9,9 @@ import (
 	// "log"
 	// "error"
 	"strings"
-
 )
 
-
-func HandleConnections(conn net.Conn){
+func HandleConnections(conn net.Conn) {
 
 	defer conn.Close()
 
@@ -37,9 +34,7 @@ func HandleConnections(conn net.Conn){
 
 		message := strings.TrimSpace(string(bytes))
 
-        fmt.Println("received:", message)
-
-
+		fmt.Println("received:", message)
 
 		response := fmt.Sprintf("response: %s", line)
 
