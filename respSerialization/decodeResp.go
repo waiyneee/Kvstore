@@ -3,7 +3,7 @@ package respserialization
 import (
 	// "fmt"
 	"errors"
-	"fmt"
+	// "fmt"
 )
 
 //we will be dealing with large chunk of data mainly strings
@@ -27,7 +27,7 @@ func readSimplestring(data []byte) (string,int,error){
 }
 func readrespErrors(data []byte) (interface{},int,error){
   //same as simplestrng inly - sign 
-  
+
    return readSimplestring(data)
 }
 func readBulkString(data []byte) (string, int, error) {
@@ -144,9 +144,9 @@ func Decode(data []byte) (interface{},error){
 
 	//npw to caaling helper to decode resp one by one 
 	value,_,err:= decodeOneResp(data)
-	if err!=nil{
-		fmt.Errorf("Got some unexpected error while decoding..")
-	}
+	// if err!=nil{
+	// 	fmt.Errorf("Got some unexpected error while decoding..")
+	// }
 	return value,err
 
 }
