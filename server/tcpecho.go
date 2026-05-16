@@ -1,46 +1,49 @@
 package server
 
 import (
-	"fmt"
-	"net"
-
 	"bufio"
+	"fmt"
 	"io"
-	// "log"
-	// "error"
+	"net"
 	"strings"
 )
 
-func HandleConnections(conn net.Conn) {
+// readCommand reads one full line (command) from the connection
+func readCommand(r *bufio.Reader) (string, error) {
+	bytes, err := r.ReadBytes('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(bytes)), nil
+}
 
+// respond writes a response back to the connection
+func respond(conn net.Conn, msg string) error {
+	_, err := conn.Write([]byte(msg))
+	return err
+}
+
+func HandleConnections(conn net.Conn) {
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
 
 	for {
-
-		bytes, err := reader.ReadBytes('\n')
-
+		cmd, err := readCommand(reader)
 		if err != nil {
-
 			if err != io.EOF {
 				fmt.Println("failed to read data:", err)
 			}
-
 			return
 		}
 
-		line := fmt.Sprintf("request: %s", bytes)
+		fmt.Println("command", cmd)
 
-		message := strings.TrimSpace(string(bytes))
+		// same response style as your original second file
+		line := fmt.Sprintf("request: %s", cmd)
+		response := fmt.Sprintf("response: %s\n", line)
 
-		fmt.Println("received:", message)
-
-		response := fmt.Sprintf("response: %s", line)
-
-		_, err = conn.Write([]byte(response))
-
-		if err != nil {
+		if err := respond(conn, response); err != nil {
 			fmt.Println("failed while writing:", err)
 			return
 		}
