@@ -1,9 +1,6 @@
 package commands
 
-
-
-type Commands struct{
-	cmd string
-	args []string
+type Command struct {
+	Cmd  string
+	Args []string
 }
-

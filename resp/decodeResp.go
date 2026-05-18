@@ -1,4 +1,4 @@
-package respserialization
+package resp
 
 import (
 	// "fmt"
@@ -120,6 +120,38 @@ func decodeOneResp(data []byte) (interface{}, int, error) {
 		return readSimplestring(data)
 
 	}
+
+
+
+}
+
+
+func DecodeArrayString(data []byte) ([]string,error) {
+
+	decodedData,err:=Decode(data)
+	if err!=nil{
+		return nil,err
+	}
+
+	taskInterface,ok:=decodedData.([]interface{})
+	if !ok {
+        return nil, errors.New("resp: data is not a valid array payload")
+    }
+
+
+	tokens:=make([]string,len(taskInterface))
+
+	for i:=range  tokens{
+		strVal, ok := taskInterface[i].(string)
+        if !ok {
+            return nil, errors.New("resp: array element is not a string")
+        }
+        tokens[i] = strVal
+	}
+
+	return tokens,nil
+
+
 
 }
 func Decode(data []byte) (interface{}, error) {
