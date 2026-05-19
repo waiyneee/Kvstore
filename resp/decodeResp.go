@@ -121,37 +121,31 @@ func decodeOneResp(data []byte) (interface{}, int, error) {
 
 	}
 
-
-
 }
 
+func DecodeArrayString(data []byte) ([]string, error) {
 
-func DecodeArrayString(data []byte) ([]string,error) {
-
-	decodedData,err:=Decode(data)
-	if err!=nil{
-		return nil,err
+	decodedData, err := Decode(data)
+	if err != nil {
+		return nil, err
 	}
 
-	taskInterface,ok:=decodedData.([]interface{})
+	taskInterface, ok := decodedData.([]interface{})
 	if !ok {
-        return nil, errors.New("resp: data is not a valid array payload")
-    }
-
-
-	tokens:=make([]string,len(taskInterface))
-
-	for i:=range  tokens{
-		strVal, ok := taskInterface[i].(string)
-        if !ok {
-            return nil, errors.New("resp: array element is not a string")
-        }
-        tokens[i] = strVal
+		return nil, errors.New("resp: data is not a valid array payload")
 	}
 
-	return tokens,nil
+	tokens := make([]string, len(taskInterface))
 
+	for i := range tokens {
+		strVal, ok := taskInterface[i].(string)
+		if !ok {
+			return nil, errors.New("resp: array element is not a string")
+		}
+		tokens[i] = strVal
+	}
 
+	return tokens, nil
 
 }
 func Decode(data []byte) (interface{}, error) {

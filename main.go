@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/waiyneee/Kvstore/server"
-	"net"
 	"os"
+	"log"
+
+	"github.com/waiyneee/Kvstore/server"
+	
+
 )
 
 func main() {
@@ -19,35 +22,11 @@ func main() {
 		os.Exit(1)
 
 	}
+    port:=os.Args[1]
 
-	port := fmt.Sprintf(":%s", os.Args[1])
-
-	lstnr, err := net.Listen("tcp", port)
+	err := server.HandleConnections(port)
 	if err != nil {
-		fmt.Println("got listening error", err)
-		os.Exit(1)
-
-	}
-
-	defer lstnr.Close()
-	fmt.Println("listenign to the server on a specific port ", lstnr.Addr())
-
-	for {
-		//blocking call waiting to be accepted
-		conn, err := lstnr.Accept()
-		if err != nil {
-			fmt.Println("failed to get connection ,err:", err)
-
-			continue
-
-		}
-
-		go server.HandleConnections(conn)
-
-		//go automatically gives us concurrency
-		//through goroutine no need of system calls
-		//we can make this gracefull handling
-
+		log.Fatalf("Fatal: Server runtime crashed: %v\n", err)
 	}
 
 }
