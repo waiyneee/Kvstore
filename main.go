@@ -2,12 +2,10 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"log"
+	"os"
 
 	"github.com/waiyneee/Kvstore/server"
-	
-
 )
 
 func main() {
@@ -22,7 +20,7 @@ func main() {
 		os.Exit(1)
 
 	}
-    port:=os.Args[1]
+	port := os.Args[1]
 
 	err := server.HandleConnections(port)
 	if err != nil {
