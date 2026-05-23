@@ -118,6 +118,7 @@ func HandleConnections(portStr string) error {
 				if err != nil {
 					unix.EpollCtl(epollFD, unix.EPOLL_CTL_DEL, currFD, nil)
 					unix.Close(currFD)
+					commands.CleanUpClient(currFD) // Wipe the disconnected client
 				}
 			}
 		}
