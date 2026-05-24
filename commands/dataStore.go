@@ -31,3 +31,8 @@ func NewObj(value interface{}, durationMs int64) *Obj {
 func Put(key string, obj *Obj) {
 	store[key] = obj
 }
+
+func Get(key string) *Obj {
+	return store[key]
+
+}

@@ -15,7 +15,15 @@ func Encode(val interface{}, isSimpleString bool) []byte {
 		return []byte(
 			fmt.Sprintf("$%d\r\n%s\r\n", len(v), v),
 		)
+	case int64:
+		return []byte(fmt.Sprintf(":%d\r\n", v))
+	default:
+		return []byte("$-1\r\n")
 	}
+}
 
-	return []byte{}
+func RespNil() []byte {
+	//(nil) that redis returns to us
+
+	return []byte("$-1\r\n")
 }

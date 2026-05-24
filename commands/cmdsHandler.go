@@ -5,6 +5,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -33,7 +34,8 @@ func ResponsePing(args []string, fd int) error {
 
 func ResponseSetKv(args []string, fd int) error {
 	if len(args) <= 1 {
-		return errors.New("ERR wrong number of arguments for 'set' command")
+		unix.Write(fd, []byte("-ERR wrong number of arguments for 'set' command\r\n"))
+		return nil
 
 	}
 	var key string = args[0]
@@ -48,22 +50,93 @@ func ResponseSetKv(args []string, fd int) error {
 		case "EX", "ex":
 			i++
 			if i == len(args) {
-				return errors.New("(error) ERR syntax error")
+				unix.Write(fd, []byte("-ERR syntax error\r\n"))
+				return nil
 			}
 
 			expiryDuration, err := strconv.ParseInt(args[i], 10, 64)
 			if err != nil {
-				return errors.New("(error) ERR value is not an integer or out of range")
+				unix.Write(fd, []byte("-ERR value is not an integer or out of range\r\n"))
+				return nil
 			}
 			durationMs = expiryDuration * 1000
 		default:
-			return errors.New("(error) ERR syntax error")
+			unix.Write(fd, []byte("-ERR syntax error\r\n"))
+			return nil
 
 		}
 	}
 	Put(key, NewObj(value, durationMs))
 	//rsp encode Ok
 	buff := resp.Encode("OK", true)
+	_, err := unix.Write(fd, buff)
+
+	return err
+}
+func ResponseGetk(args []string, fd int) error {
+	if len(args) != 1 {
+		// ADDED: return nil to stop execution and keep connection alive
+		unix.Write(fd, []byte("-ERR wrong number of arguments for 'get' command\r\n"))
+		return nil
+	}
+
+	var key string = args[0]
+	obj := Get(key)
+
+	if obj == nil {
+		var nilbuff []byte = resp.RespNil()
+		_, err := unix.Write(fd, nilbuff)
+		return err
+	}
+
+	// If key already expired then return nil AND delete it from memory
+	//important no dead key
+	if obj.expiryAtTimestamps != -1 && obj.expiryAtTimestamps <= time.Now().UnixMilli() {
+		delete(store, key) // PASSIVE EVICTION FIX
+		var nilbuff []byte = resp.RespNil()
+		_, err := unix.Write(fd, nilbuff)
+		return err
+	}
+
+	buff := resp.Encode(obj.Value, false)
+	_, err := unix.Write(fd, buff)
+
+	return err
+}
+
+func ResponseTTl(args []string, fd int) error {
+	if len(args) != 1 {
+		// ADDED: return nil
+		unix.Write(fd, []byte("-ERR wrong number of arguments for 'ttl' command\r\n"))
+		return nil
+	}
+
+	var key string = args[0]
+	obj := Get(key)
+
+	if obj == nil {
+		// ADDED: return nil
+		unix.Write(fd, []byte(":-2\r\n"))
+		return nil
+	}
+
+	if obj.expiryAtTimestamps == -1 {
+		// ADDED: return nil
+		unix.Write(fd, []byte(":-1\r\n"))
+		return nil
+	}
+
+	durationMs := obj.expiryAtTimestamps - time.Now().UnixMilli()
+
+	// If key expired
+	if durationMs < 0 {
+		delete(store, key) // PASSIVE EVICTION FIX
+		unix.Write(fd, []byte(":-2\r\n"))
+		return nil
+	}
+
+	// TTL natively returns seconds, not milliseconds, so we divide by 1000
+	buff := resp.Encode(int64(durationMs/1000), false)
 	_, err := unix.Write(fd, buff)
 
 	return err
@@ -76,6 +149,11 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 		return ResponsePing(cmd.Args, fd)
 	case "SET":
 		return ResponseSetKv(cmd.Args, fd)
+	case "GET":
+		return ResponseGetk(cmd.Args, fd)
+	case "TTL":
+		return ResponseTTl(cmd.Args, fd)
+
 	default:
 		return ResponsePing(cmd.Args, fd)
 	}
