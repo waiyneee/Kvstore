@@ -3,13 +3,15 @@ package commands
 import (
 	"errors"
 	"log"
+	"strconv"
 	"strings"
+
 	"golang.org/x/sys/unix"
 
 	"github.com/waiyneee/Kvstore/resp"
 )
 
-// Global map 
+// Global map
 var clientBuffers = make(map[int][]byte)
 
 func ResponsePing(args []string, fd int) error {
@@ -29,16 +31,55 @@ func ResponsePing(args []string, fd int) error {
 	return err
 }
 
+func ResponseSetKv(args []string, fd int) error {
+	if len(args) <= 1 {
+		return errors.New("ERR wrong number of arguments for 'set' command")
+
+	}
+	var key string = args[0]
+	var value string = args[1]
+
+	var durationMs int64 = -1 //return if no expiry set an int value
+
+	//checking expiry
+	for i := 2; i < len(args); i++ {
+
+		switch args[i] {
+		case "EX", "ex":
+			i++
+			if i == len(args) {
+				return errors.New("(error) ERR syntax error")
+			}
+
+			expiryDuration, err := strconv.ParseInt(args[i], 10, 64)
+			if err != nil {
+				return errors.New("(error) ERR value is not an integer or out of range")
+			}
+			durationMs = expiryDuration * 1000
+		default:
+			return errors.New("(error) ERR syntax error")
+
+		}
+	}
+	Put(key, NewObj(value, durationMs))
+	//rsp encode Ok
+	buff := resp.Encode("OK", true)
+	_, err := unix.Write(fd, buff)
+
+	return err
+}
+
 func ResponsewithCommand(cmd *Command, fd int) error {
 	log.Println("Command::", cmd)
 	switch cmd.Cmd {
 	case "PING":
 		return ResponsePing(cmd.Args, fd)
+	case "SET":
+		return ResponseSetKv(cmd.Args, fd)
 	default:
 		return ResponsePing(cmd.Args, fd)
 	}
 }
-
 
 func CleanUpClient(fd int) {
 	delete(clientBuffers, fd)
@@ -62,14 +103,13 @@ func ProcessClientData(fd int) error {
 	// 1. Append the newly arrived stream
 	clientBuffers[fd] = append(clientBuffers[fd], buffer[:n]...)
 
-	
 	for len(clientBuffers[fd]) > 0 {
 		tokens, err := resp.DecodeArrayString(clientBuffers[fd])
 		if err != nil {
 			// Check if the parser failed simply because the packet is cut off mid-stream
 			errStr := err.Error()
 			if strings.Contains(errStr, "insufficient data") || strings.Contains(errStr, "no decoded data") {
-			
+
 				break
 			}
 			return err // Actual malformed
@@ -89,7 +129,6 @@ func ProcessClientData(fd int) error {
 			return err
 		}
 
-	
 		clientBuffers[fd] = nil
 	}
 
