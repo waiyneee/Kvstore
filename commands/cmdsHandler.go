@@ -64,13 +64,23 @@ func ResponseSetKv(args []string, fd int) error {
 	}
 	store.Put(key, store.NewObj(value, durationMs))
 
-	fullCmd := append([]string{"SET"}, args...)
-	persistence.AppendToAOF(fullCmd)
+	// fullCmd := append([]string{"SET"}, args...)
+	// persistence.AppendToAOF(fullCmd)
 
-	buff := resp.Encode("OK", true)
-	_, err := unix.Write(fd, buff)
+	//  Only write to disk and network if it's a real client!
+	if fd != -1 {
+		fullCmd := append([]string{"SET"}, args...)
+		persistence.AppendToAOF(fullCmd)
 
-	return err
+		buff := resp.Encode("OK", true)
+		_, err := unix.Write(fd, buff)
+		return err
+	}
+
+	// buff := resp.Encode("OK", true)
+	// _, err := unix.Write(fd, buff)
+
+	return nil
 }
 
 func ResponseGetk(args []string, fd int) error {
@@ -147,15 +157,19 @@ func ResponseDel(args []string, fd int) error {
 		}
 	}
 
-	if cnt > 0 {
-		fullCmd := append([]string{"DEL"}, args...)
-		persistence.AppendToAOF(fullCmd)
+	// Only write to disk and network if it's a real client!
+	if fd != -1 {
+		if cnt > 0 {
+			fullCmd := append([]string{"DEL"}, args...)
+			persistence.AppendToAOF(fullCmd)
+		}
+
+		buff := resp.Encode(int64(cnt), false)
+		_, err := unix.Write(fd, buff)
+		return err
 	}
 
-	buff := resp.Encode(int64(cnt), false)
-	_, err := unix.Write(fd, buff)
-
-	return err
+	return nil
 }
 
 func ResponseExpire(args []string, fd int) error {
@@ -182,10 +196,12 @@ func ResponseExpire(args []string, fd int) error {
 
 	obj.ExpiryAtTimestamps = time.Now().UnixMilli() + expiryMs
 
-	fullCmd := append([]string{"EXPIRE"}, args...)
-	persistence.AppendToAOF(fullCmd)
+	if fd != -1 {
+		fullCmd := append([]string{"EXPIRE"}, args...)
+		persistence.AppendToAOF(fullCmd)
 
-	unix.Write(fd, []byte(":1\r\n"))
+		unix.Write(fd, []byte(":1\r\n"))
+	}
 	return nil
 }
 
