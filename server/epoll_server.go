@@ -4,12 +4,15 @@ import (
 	"log"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
 
-	"github.com/waiyneee/Kvstore/store"
 	"github.com/waiyneee/Kvstore/commands"
+	"github.com/waiyneee/Kvstore/persistence"
+	"github.com/waiyneee/Kvstore/resp"
+	"github.com/waiyneee/Kvstore/store"
 )
 
 var (
@@ -17,8 +20,7 @@ var (
 )
 
 func HandleConnections(portStr string) error {
-	// Take control from go's scheduler
-	runtime.GOMAXPROCS(1) // single threaded
+	runtime.GOMAXPROCS(1)
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -30,7 +32,6 @@ func HandleConnections(portStr string) error {
 	log.Printf("Starting pure single-threaded epoll server on %s:%d\n", host, port)
 	maxClients := 10000
 
-	// Raw tcp socket
 	serverFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
 	if err != nil {
 		return err
@@ -41,31 +42,26 @@ func HandleConnections(portStr string) error {
 		return err
 	}
 
-	// Making socket non-blocking
 	if err := unix.SetNonblock(serverFD, true); err != nil {
 		return err
 	}
 
-	// Address binding with port
 	addr := unix.SockaddrInet4{Port: port}
 	copy(addr.Addr[:], []byte{0, 0, 0, 0})
 	if err := unix.Bind(serverFD, &addr); err != nil {
 		return err
 	}
 
-	// Listening
 	if err := unix.Listen(serverFD, maxClients); err != nil {
 		return err
 	}
 
-	// Now epoll_instance descriptor
 	epollFD, err := unix.EpollCreate1(0)
 	if err != nil {
 		return err
 	}
 	defer unix.Close(epollFD)
 
-	// Event tracking configuration
 	serverEvent := unix.EpollEvent{
 		Events: unix.EPOLLIN,
 		Fd:     int32(serverFD),
@@ -75,15 +71,33 @@ func HandleConnections(portStr string) error {
 		return err
 	}
 
-	// An array for kernel collecting cycles
 	eventsarr := make([]unix.EpollEvent, maxClients)
 
-	//cronfreq tracking
+	log.Println("Checking for AOF persistence file...")
+	aofData, _ := persistence.RestoreFromAOF()
+	if len(aofData) > 0 {
+		log.Println("Restoring database from AOF...")
+		for len(aofData) > 0 {
+			tokens, consumedBytes, err := resp.DecodeArrayString(aofData)
+			if err != nil || len(tokens) == 0 {
+				break
+			}
+			cmd := &commands.Command{
+				Cmd:  strings.ToUpper(tokens[0]),
+				Args: tokens[1:],
+			}
+
+			commands.ResponsewithCommand(cmd, -1)
+
+			aofData = aofData[consumedBytes:]
+		}
+		log.Println("AOF Restoration complete.")
+	}
+
 	cronFrequency := 1 * time.Second
 	lastCronExecTime := time.Now()
 
 	for {
-
 		now := time.Now()
 
 		if now.After(lastCronExecTime.Add(cronFrequency)) {
@@ -97,11 +111,11 @@ func HandleConnections(portStr string) error {
 		if timeoutMs <= 0 {
 			timeoutMs = 10
 		}
-		// Execution blocks here until an event fires
+
 		nEvents, err := unix.EpollWait(epollFD, eventsarr, timeoutMs)
 		if err != nil {
 			if err == unix.EINTR {
-				continue // System call was interrupted, retry safely
+				continue
 			}
 			log.Println("epoll_wait system error:", err)
 			continue
@@ -111,7 +125,6 @@ func HandleConnections(portStr string) error {
 			currFD := int(eventsarr[i].Fd)
 
 			if currFD == serverFD {
-				// New client opening a data connection
 				clientFD, _, err := unix.Accept(serverFD)
 				if err != nil {
 					log.Println("Failed to accept raw client connection:", err)
@@ -123,7 +136,6 @@ func HandleConnections(portStr string) error {
 					continue
 				}
 
-				// Track this client socket
 				clientEvent := unix.EpollEvent{
 					Events: unix.EPOLLIN,
 					Fd:     int32(clientFD),
@@ -133,12 +145,11 @@ func HandleConnections(portStr string) error {
 					unix.Close(clientFD)
 				}
 			} else {
-				// Active client has data
 				err := commands.ProcessClientData(currFD)
 				if err != nil {
 					unix.EpollCtl(epollFD, unix.EPOLL_CTL_DEL, currFD, nil)
 					unix.Close(currFD)
-					commands.CleanUpClient(currFD) // Wipe the disconnected client
+					commands.CleanUpClient(currFD)
 				}
 			}
 		}
