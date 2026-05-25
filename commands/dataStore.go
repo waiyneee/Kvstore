@@ -45,3 +45,42 @@ func Del(key string) bool{
 	return false
 
 }
+
+func expireSample() float32 {
+	var limit int = 20
+	var expiredCount int = 0
+
+	// Map iteration in Go is naturally randomized
+	//so random sampling is easier 
+	for key, obj := range store {
+		if obj.expiryAtTimestamps != -1 {
+			limit--
+			// If the key is expired, actively delete it
+			if obj.expiryAtTimestamps <= time.Now().UnixMilli() {
+				delete(store, key)
+				expiredCount++
+			}
+		}
+
+		// Once we've checked 20 keys
+		//we are done 
+		if limit <= 0 {
+			break
+		}
+	}
+
+	return float32(expiredCount) / float32(20.0)
+}
+
+// DeleteExpiredKeys runs the probabilistic active expiration cycle
+func DeleteExpiredKeys() {
+	for {
+		frac := expireSample()
+		// If less than 25% of the sampled keys were expired,
+		//break the cycle 
+		if frac < 0.25 {
+			break
+		}
+	}
+}
+
