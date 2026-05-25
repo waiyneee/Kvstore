@@ -142,53 +142,52 @@ func ResponseTTl(args []string, fd int) error {
 	return err
 }
 
-func ResponseDel(args []string,fd int) error{
-	if len(args)<1{
-		unix.Write(fd,[]byte("-ERR wrong number of arguments for 'del' command\r\n"))
+func ResponseDel(args []string, fd int) error {
+	if len(args) < 1 {
+		unix.Write(fd, []byte("-ERR wrong number of arguments for 'del' command\r\n"))
 		return nil
 	}
-	var cnt int64=0
+	var cnt int64 = 0
 
-	for _,key:=range args{
-		if ok:=Del(key);ok{
+	for _, key := range args {
+		if ok := Del(key); ok {
 			cnt++
 		}
 	}
 
-	buff:=resp.Encode(int64(cnt),false)
-	_,err :=unix.Write(fd,buff)
+	buff := resp.Encode(int64(cnt), false)
+	_, err := unix.Write(fd, buff)
 
 	return err
 
 }
 
-func ResponseExpire(args []string,fd int) error{
-	if len(args)<=1{
-		unix.Write(fd,[]byte("-ERR wrong number of arguments for 'expire' command\r\n"))
+func ResponseExpire(args []string, fd int) error {
+	if len(args) <= 1 {
+		unix.Write(fd, []byte("-ERR wrong number of arguments for 'expire' command\r\n"))
 		return nil
 	}
 
-	var key string=args[0]
-	expiryDuration,err:=strconv.ParseInt(args[1],10,64)
-	
+	var key string = args[0]
+	expiryDuration, err := strconv.ParseInt(args[1], 10, 64)
 
-	if err!=nil{
-		unix.Write(fd,[]byte("-ERR value is not an integer or out of range\r\n"))
+	if err != nil {
+		unix.Write(fd, []byte("-ERR value is not an integer or out of range\r\n"))
 		return nil
 	}
 
-	expiryMs:=expiryDuration*1000
+	expiryMs := expiryDuration * 1000
 
-	obj:=Get(key)
-	if obj==nil{
-		unix.Write(fd,[]byte(":0\r\n"))
+	obj := Get(key)
+	if obj == nil {
+		unix.Write(fd, []byte(":0\r\n"))
 		return nil
 	}
 
-	obj.expiryAtTimestamps=time.Now().UnixMilli() + expiryMs
+	obj.expiryAtTimestamps = time.Now().UnixMilli() + expiryMs
 	// 1 if the timeout was set.
 
-	unix.Write(fd,[]byte(":1\r\n"))
+	unix.Write(fd, []byte(":1\r\n"))
 	return nil
 
 }
@@ -205,9 +204,9 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 	case "TTL":
 		return ResponseTTl(cmd.Args, fd)
 	case "DEL":
-		return ResponseDel(cmd.Args, fd )
+		return ResponseDel(cmd.Args, fd)
 	case "EXPIRE":
-		return ResponseExpire(cmd.Args, fd )
+		return ResponseExpire(cmd.Args, fd)
 
 	default:
 		return ResponsePing(cmd.Args, fd)
@@ -217,7 +216,6 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 func CleanUpClient(fd int) {
 	delete(clientBuffers, fd)
 }
-
 func ProcessClientData(fd int) error {
 	buffer := make([]byte, 512)
 
@@ -233,19 +231,23 @@ func ProcessClientData(fd int) error {
 		return errors.New("client disconnected")
 	}
 
-	// 1. Append the newly arrived stream
+	// Append the incoming bytes to the client's persistent stream buffer
 	clientBuffers[fd] = append(clientBuffers[fd], buffer[:n]...)
 
+	// Continuously process commands as long
+	//  as there is data in the buffer
 	for len(clientBuffers[fd]) > 0 {
-		tokens, err := resp.DecodeArrayString(clientBuffers[fd])
-		if err != nil {
-			// Check if the parser failed simply because the packet is cut off mid-stream
-			errStr := err.Error()
-			if strings.Contains(errStr, "insufficient data") || strings.Contains(errStr, "no decoded data") {
 
+		tokens, consumedBytes, err := resp.DecodeArrayString(clientBuffers[fd])
+
+		if err != nil {
+			errStr := err.Error()
+			// If the command is cut off, stop parsing
+			//wait
+			if strings.Contains(errStr, "insufficient data") || strings.Contains(errStr, "no decoded data") {
 				break
 			}
-			return err // Actual malformed
+			return err
 		}
 
 		if len(tokens) == 0 {
@@ -257,12 +259,13 @@ func ProcessClientData(fd int) error {
 			Args: tokens[1:],
 		}
 
+		// Execute the command
 		err = ResponsewithCommand(cmd, fd)
 		if err != nil {
 			return err
 		}
 
-		clientBuffers[fd] = nil
+		clientBuffers[fd] = clientBuffers[fd][consumedBytes:]
 	}
 
 	return nil

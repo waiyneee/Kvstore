@@ -36,9 +36,9 @@ func Get(key string) *Obj {
 	return store[key]
 
 }
-func Del(key string) bool{
-	if _,ok:=store[key];ok{
-		delete(store,key)
+func Del(key string) bool {
+	if _, ok := store[key]; ok {
+		delete(store, key)
 		return true
 	}
 
@@ -51,7 +51,7 @@ func expireSample() float32 {
 	var expiredCount int = 0
 
 	// Map iteration in Go is naturally randomized
-	//so random sampling is easier 
+	//so random sampling is easier
 	for key, obj := range store {
 		if obj.expiryAtTimestamps != -1 {
 			limit--
@@ -63,7 +63,7 @@ func expireSample() float32 {
 		}
 
 		// Once we've checked 20 keys
-		//we are done 
+		//we are done
 		if limit <= 0 {
 			break
 		}
@@ -77,10 +77,9 @@ func DeleteExpiredKeys() {
 	for {
 		frac := expireSample()
 		// If less than 25% of the sampled keys were expired,
-		//break the cycle 
+		//break the cycle
 		if frac < 0.25 {
 			break
 		}
 	}
 }
-

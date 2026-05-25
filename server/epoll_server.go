@@ -77,27 +77,24 @@ func HandleConnections(portStr string) error {
 	// An array for kernel collecting cycles
 	eventsarr := make([]unix.EpollEvent, maxClients)
 
-	//cronfreq tracking 
-	cronFrequency:=1*time.Second
-	lastCronExecTime:=time.Now()
+	//cronfreq tracking
+	cronFrequency := 1 * time.Second
+	lastCronExecTime := time.Now()
 
 	for {
 
 		now := time.Now()
-		
-	
+
 		if now.After(lastCronExecTime.Add(cronFrequency)) {
 			commands.DeleteExpiredKeys()
 			lastCronExecTime = time.Now()
 		}
 
-		
 		nextCronTime := lastCronExecTime.Add(cronFrequency)
 		timeoutMs := int(time.Until(nextCronTime).Milliseconds())
-		
-		
+
 		if timeoutMs <= 0 {
-			timeoutMs = 10 
+			timeoutMs = 10
 		}
 		// Execution blocks here until an event fires
 		nEvents, err := unix.EpollWait(epollFD, eventsarr, -1)

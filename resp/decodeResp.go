@@ -122,17 +122,16 @@ func decodeOneResp(data []byte) (interface{}, int, error) {
 	}
 
 }
-
-func DecodeArrayString(data []byte) ([]string, error) {
-
-	decodedData, err := Decode(data)
+func DecodeArrayString(data []byte) ([]string, int, error) {
+	// Capture the 'delta' from Decode
+	decodedData, delta, err := Decode(data)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	taskInterface, ok := decodedData.([]interface{})
 	if !ok {
-		return nil, errors.New("resp: data is not a valid array payload")
+		return nil, 0, errors.New("resp: data is not a valid array payload")
 	}
 
 	tokens := make([]string, len(taskInterface))
@@ -140,26 +139,22 @@ func DecodeArrayString(data []byte) ([]string, error) {
 	for i := range tokens {
 		strVal, ok := taskInterface[i].(string)
 		if !ok {
-			return nil, errors.New("resp: array element is not a string")
+			return nil, 0, errors.New("resp: array element is not a string")
 		}
 		tokens[i] = strVal
 	}
 
-	return tokens, nil
-
+	// Return tokens AND the delta
+	return tokens, delta, nil
 }
-func Decode(data []byte) (interface{}, error) {
 
+func Decode(data []byte) (interface{}, int, error) {
 	if len(data) == 0 {
-		return nil, errors.New("there is no data to be recieved please some dtat must be there ")
-
+		return nil, 0, errors.New("there is no data to be recieved please some dtat must be there ")
 	}
 
-	//npw to caaling helper to decode resp one by one
-	value, _, err := decodeOneResp(data)
-	// if err!=nil{
-	// 	fmt.Errorf("Got some unexpected error while decoding..")
-	// }
-	return value, err
+	// Capture the delta instead of using the blank identifier '_'
+	value, delta, err := decodeOneResp(data)
 
+	return value, delta, err
 }
