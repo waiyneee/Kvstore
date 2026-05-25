@@ -1,14 +1,14 @@
-package commands
+package store
 
 import "time"
 
 type Obj struct {
 	Value              interface{}
-	expiryAtTimestamps int64
+	ExpiryAtTimestamps int64
 }
 
 // a hashmap
-var store = make(map[string]*Obj)
+var Store = make(map[string]*Obj)
 
 // func init() {
 // 	//constructor
@@ -23,22 +23,22 @@ func NewObj(value interface{}, durationMs int64) *Obj {
 
 	return &Obj{
 		Value:              value,
-		expiryAtTimestamps: expiryat,
+		ExpiryAtTimestamps: expiryat,
 	}
 
 }
 
 func Put(key string, obj *Obj) {
-	store[key] = obj
+	Store[key] = obj
 }
 
 func Get(key string) *Obj {
-	return store[key]
+	return Store[key]
 
 }
 func Del(key string) bool {
-	if _, ok := store[key]; ok {
-		delete(store, key)
+	if _, ok := Store[key]; ok {
+		delete(Store, key)
 		return true
 	}
 
@@ -52,12 +52,12 @@ func expireSample() float32 {
 
 	// Map iteration in Go is naturally randomized
 	//so random sampling is easier
-	for key, obj := range store {
-		if obj.expiryAtTimestamps != -1 {
+	for key, obj := range Store {
+		if obj.ExpiryAtTimestamps != -1 {
 			limit--
 			// If the key is expired, actively delete it
-			if obj.expiryAtTimestamps <= time.Now().UnixMilli() {
-				delete(store, key)
+			if obj.ExpiryAtTimestamps <= time.Now().UnixMilli() {
+				delete(Store, key)
 				expiredCount++
 			}
 		}

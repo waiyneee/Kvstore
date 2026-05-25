@@ -9,7 +9,10 @@ import (
 
 	"golang.org/x/sys/unix"
 
+
 	"github.com/waiyneee/Kvstore/resp"
+	"github.com/waiyneee/Kvstore/store"
+	"github.com/waiyneee/Kvstore/persistence"
 )
 
 // Global map
@@ -66,7 +69,7 @@ func ResponseSetKv(args []string, fd int) error {
 
 		}
 	}
-	Put(key, NewObj(value, durationMs))
+	store.Put(key, store.NewObj(value, durationMs))
 	//rsp encode Ok
 	buff := resp.Encode("OK", true)
 	_, err := unix.Write(fd, buff)
@@ -81,7 +84,7 @@ func ResponseGetk(args []string, fd int) error {
 	}
 
 	var key string = args[0]
-	obj := Get(key)
+	obj := store.Get(key)
 
 	if obj == nil {
 		var nilbuff []byte = resp.RespNil()
@@ -91,8 +94,8 @@ func ResponseGetk(args []string, fd int) error {
 
 	// If key already expired then return nil AND delete it from memory
 	//important no dead key
-	if obj.expiryAtTimestamps != -1 && obj.expiryAtTimestamps <= time.Now().UnixMilli() {
-		delete(store, key) // PASSIVE EVICTION FIX
+	if obj.ExpiryAtTimestamps != -1 && obj.ExpiryAtTimestamps <= time.Now().UnixMilli() {
+		delete(store.Store, key) // PASSIVE EVICTION FIX
 		var nilbuff []byte = resp.RespNil()
 		_, err := unix.Write(fd, nilbuff)
 		return err
@@ -112,7 +115,7 @@ func ResponseTTl(args []string, fd int) error {
 	}
 
 	var key string = args[0]
-	obj := Get(key)
+	obj := store.Get(key)
 
 	if obj == nil {
 		// ADDED: return nil
@@ -120,17 +123,17 @@ func ResponseTTl(args []string, fd int) error {
 		return nil
 	}
 
-	if obj.expiryAtTimestamps == -1 {
+	if obj.ExpiryAtTimestamps == -1 {
 		// ADDED: return nil
 		unix.Write(fd, []byte(":-1\r\n"))
 		return nil
 	}
 
-	durationMs := obj.expiryAtTimestamps - time.Now().UnixMilli()
+	durationMs := obj.ExpiryAtTimestamps - time.Now().UnixMilli()
 
 	// If key expired
 	if durationMs < 0 {
-		delete(store, key) // PASSIVE EVICTION FIX
+		delete(store.Store, key) // PASSIVE EVICTION FIX
 		unix.Write(fd, []byte(":-2\r\n"))
 		return nil
 	}
@@ -150,7 +153,7 @@ func ResponseDel(args []string, fd int) error {
 	var cnt int64 = 0
 
 	for _, key := range args {
-		if ok := Del(key); ok {
+		if ok := store.Del(key); ok {
 			cnt++
 		}
 	}
@@ -178,18 +181,26 @@ func ResponseExpire(args []string, fd int) error {
 
 	expiryMs := expiryDuration * 1000
 
-	obj := Get(key)
+	obj := store.Get(key)
 	if obj == nil {
 		unix.Write(fd, []byte(":0\r\n"))
 		return nil
 	}
 
-	obj.expiryAtTimestamps = time.Now().UnixMilli() + expiryMs
+	obj.ExpiryAtTimestamps = time.Now().UnixMilli() + expiryMs
 	// 1 if the timeout was set.
 
 	unix.Write(fd, []byte(":1\r\n"))
 	return nil
 
+}
+func AppenAofFile(args []string, fd int) error {
+	if len(args) != 0 {
+		unix.Write(fd, []byte("-ERR wrong number of arguments for 'bgrewriteaof' command\r\n"))
+		return nil
+	}
+	// Execute the persistence rewrite and return any error
+	return persistence.WriteAheadOfLog()
 }
 
 func ResponsewithCommand(cmd *Command, fd int) error {
@@ -207,6 +218,8 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 		return ResponseDel(cmd.Args, fd)
 	case "EXPIRE":
 		return ResponseExpire(cmd.Args, fd)
+	case "BGREWRITEOF":
+		return AppenAofFile(cmd.Args,fd)
 
 	default:
 		return ResponsePing(cmd.Args, fd)

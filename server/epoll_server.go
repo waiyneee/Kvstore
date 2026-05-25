@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/waiyneee/Kvstore/store"
 	"github.com/waiyneee/Kvstore/commands"
 )
 
@@ -86,7 +87,7 @@ func HandleConnections(portStr string) error {
 		now := time.Now()
 
 		if now.After(lastCronExecTime.Add(cronFrequency)) {
-			commands.DeleteExpiredKeys()
+			store.DeleteExpiredKeys()
 			lastCronExecTime = time.Now()
 		}
 
@@ -97,7 +98,7 @@ func HandleConnections(portStr string) error {
 			timeoutMs = 10
 		}
 		// Execution blocks here until an event fires
-		nEvents, err := unix.EpollWait(epollFD, eventsarr, -1)
+		nEvents, err := unix.EpollWait(epollFD, eventsarr, timeoutMs)
 		if err != nil {
 			if err == unix.EINTR {
 				continue // System call was interrupted, retry safely
