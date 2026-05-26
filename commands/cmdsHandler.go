@@ -212,7 +212,47 @@ func AppenAofFile(args []string, fd int) error {
 	}
 	return persistence.WriteAheadOfLog()
 }
+func ResponseIncr(args []string, fd int) error {
+	if len(args) != 1 {
+		unix.Write(fd, []byte("-ERR wrong number of arguments for 'incr' command\r\n"))
+		return nil
+	}
 
+	var key string = args[0]
+	obj := store.Get(key)
+
+	var newCounter int64 = 1
+
+	if obj == nil {
+		store.Put(key, store.NewObj("1", -1))
+	} else {
+		
+		valStr, ok := obj.Value.(string)
+		if !ok {
+			unix.Write(fd, []byte("-ERR value is not an integer or out of range\r\n"))
+			return nil
+		}
+		parsedVal, err := strconv.ParseInt(valStr, 10, 64)
+		if err != nil {
+			unix.Write(fd, []byte("-ERR value is not an integer or out of range\r\n"))
+			return nil
+		}
+
+		newCounter = parsedVal + 1
+		obj.Value = strconv.FormatInt(newCounter, 10)
+	}
+
+	// AOF Persistence & Network Response 
+	if fd != -1 {
+		fullCmd := append([]string{"INCR"}, args...)
+		persistence.AppendToAOF(fullCmd)
+		buff := resp.Encode(newCounter, false)
+		_, err := unix.Write(fd, buff)
+		return err
+	}
+
+	return nil
+}
 func ResponsewithCommand(cmd *Command, fd int) error {
 	if fd != -1 {
 		log.Println("Command::", cmd)
@@ -233,6 +273,8 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 		return ResponseExpire(cmd.Args, fd)
 	case "BGREWRITEAOF":
 		return AppenAofFile(cmd.Args, fd)
+	case "INCR":
+		return ResponseIncr(cmd.Args,fd)
 	default:
 		return ResponsePing(cmd.Args, fd)
 	}
