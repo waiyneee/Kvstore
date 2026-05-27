@@ -22,7 +22,9 @@ func ResponsePing(args []string, fd int) error {
 	var buff []byte
 
 	if len(args) >= 2 {
-		return errors.New("ERR wrong number of arguments for 'ping' command")
+		
+		unix.Write(fd, []byte("-ERR wrong number of arguments for 'ping' command\r\n"))
+		return nil
 	}
 
 	if len(args) == 0 {
@@ -317,7 +319,11 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 	case "INFO":
 		return ResponseInfo(cmd.Args,fd)
 	default:
-		return ResponsePing(cmd.Args, fd)
+		if fd != -1 {
+			errMessage := fmt.Sprintf("-ERR unknown command '%s'\r\n", cmd.Cmd)
+			unix.Write(fd, []byte(errMessage))
+		}
+		return nil
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	// "fmt"
 	"errors"
 	// "fmt"
+	"strings"
 )
 
 //we will be dealing with large chunk of data mainly strings
@@ -94,16 +95,11 @@ func readIntegerResp(data []byte) (interface{}, int, error) {
 
 	return value, pos + 2, nil
 }
-
 func decodeOneResp(data []byte) (interface{}, int, error) {
-	//here my core extraction of string ,integer and bulk strings
-	//errrors logic lives
 	if len(data) == 0 {
-		return nil, 0, errors.New("no decoded data to be recieved")
+		return nil, 0, errors.New("insufficient data")
 	}
 
-	//just take the first v
-	// alue from the slice
 	switch data[0] {
 	case '+':
 		return readSimplestring(data)
@@ -115,37 +111,46 @@ func decodeOneResp(data []byte) (interface{}, int, error) {
 		return readIntegerResp(data)
 	case '$':
 		return readBulkString(data)
-
 	default:
-		return readSimplestring(data)
-
+		
+		pos := 0
+		for pos < len(data) && data[pos] != '\r' {
+			pos++
+		}
+		if pos < len(data) {
+			return string(data[:pos]), pos + 2, nil
+		}
+		return nil, 0, errors.New("insufficient data")
 	}
-
 }
+
 func DecodeArrayString(data []byte) ([]string, int, error) {
-	// Capture the 'delta' from Decode
 	decodedData, delta, err := Decode(data)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	taskInterface, ok := decodedData.([]interface{})
-	if !ok {
-		return nil, 0, errors.New("resp: data is not a valid array payload")
-	}
-
-	tokens := make([]string, len(taskInterface))
-
-	for i := range tokens {
-		strVal, ok := taskInterface[i].(string)
-		if !ok {
-			return nil, 0, errors.New("resp: array element is not a string")
+	
+	if taskInterface, ok := decodedData.([]interface{}); ok {
+		tokens := make([]string, len(taskInterface))
+		for i := range tokens {
+			strVal, ok := taskInterface[i].(string)
+			if !ok {
+				return nil, delta, errors.New("resp: array element is not a string")
+			}
+			tokens[i] = strVal
 		}
-		tokens[i] = strVal
+		return tokens, delta, nil
 	}
 
-	// Return tokens AND the delta
-	return tokens, delta, nil
+	// 2. FIX: INLINE COMMAND FALLBACK
+	// If the data was parsed as a raw string, split it by spaces to create the args array!
+	if strVal, ok := decodedData.(string); ok {
+		tokens := strings.Split(strings.TrimSpace(strVal), " ")
+		return tokens, delta, nil
+	}
+
+	return nil, delta, errors.New("resp: data is not a valid array payload")
 }
 
 func Decode(data []byte) (interface{}, int, error) {

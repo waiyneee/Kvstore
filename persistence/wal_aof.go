@@ -12,6 +12,9 @@ import (
 
 var filePath = "./walpersistence.aof"
 
+
+var aofBuffer strings.Builder
+
 func WriteAheadOfLog() error {
 	fptr, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
@@ -29,24 +32,33 @@ func WriteAheadOfLog() error {
 	}
 	return nil
 }
-
+// lest experiment 
+//with writitn gonly in memory buffer instead of disk i/o
 func AppendToAOF(tokens []string) error {
+	aofBuffer.WriteString(fmt.Sprintf("*%d\r\n", len(tokens)))
+	for _, token := range tokens {
+		aofBuffer.WriteString(fmt.Sprintf("$%d\r\n%s\r\n", len(token), token))
+	}
+	return nil
+}
+func SyncAOF() error {
+	
+	if aofBuffer.Len() == 0 {
+		return nil
+	}
+
 	fptr, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
+		log.Println("Error opening AOF for sync:", err)
 		return err
 	}
 	defer fptr.Close()
-
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("*%d\r\n", len(tokens)))
-	for _, token := range tokens {
-		sb.WriteString(fmt.Sprintf("$%d\r\n%s\r\n", len(token), token))
+	_, err = fptr.WriteString(aofBuffer.String())
+	if err == nil {
+		aofBuffer.Reset()
 	}
-
-	_, err = fptr.Write([]byte(sb.String()))
 	return err
 }
-
 func RestoreFromAOF() ([]byte, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
