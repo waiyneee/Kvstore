@@ -6,12 +6,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"fmt"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/waiyneee/Kvstore/persistence"
 	"github.com/waiyneee/Kvstore/resp"
 	"github.com/waiyneee/Kvstore/store"
+	"github.com/waiyneee/Kvstore/eviction"
 )
 
 var clientBuffers = make(map[int][]byte)
@@ -42,6 +44,8 @@ func ResponseSetKv(args []string, fd int) error {
 	var value string = args[1]
 	var durationMs int64 = -1
 
+	
+
 	for i := 2; i < len(args); i++ {
 		switch args[i] {
 		case "EX", "ex":
@@ -62,12 +66,18 @@ func ResponseSetKv(args []string, fd int) error {
 			return nil
 		}
 	}
+
+	if len(store.Store) >= eviction.LIMIT_KEYS {
+		eviction.DoEviction()
+	}
 	store.Put(key, store.NewObj(value, durationMs))
 
 	// fullCmd := append([]string{"SET"}, args...)
 	// persistence.AppendToAOF(fullCmd)
-
+    
+	
 	//  Only write to disk and network if it's a real client!
+
 	if fd != -1 {
 		fullCmd := append([]string{"SET"}, args...)
 		persistence.AppendToAOF(fullCmd)
@@ -224,9 +234,13 @@ func ResponseIncr(args []string, fd int) error {
 	var newCounter int64 = 1
 
 	if obj == nil {
+
+		if len(store.Store) >= eviction.LIMIT_KEYS {
+            eviction.DoEviction()
+        }
 		store.Put(key, store.NewObj("1", -1))
 	} else {
-		
+
 		valStr, ok := obj.Value.(string)
 		if !ok {
 			unix.Write(fd, []byte("-ERR value is not an integer or out of range\r\n"))
@@ -242,7 +256,6 @@ func ResponseIncr(args []string, fd int) error {
 		obj.Value = strconv.FormatInt(newCounter, 10)
 	}
 
-	// AOF Persistence & Network Response 
 	if fd != -1 {
 		fullCmd := append([]string{"INCR"}, args...)
 		persistence.AppendToAOF(fullCmd)
@@ -253,6 +266,32 @@ func ResponseIncr(args []string, fd int) error {
 
 	return nil
 }
+
+func ResponseInfo(args []string,fd int) error {
+eviction.UpdateDBStat(0, "keys", len(store.Store))
+
+	var sb strings.Builder
+
+	
+	sb.WriteString("# Server\r\n")
+	sb.WriteString("redis_version:7.0.0\r\n")
+	sb.WriteString("os:linux\r\n\r\n")
+
+	sb.WriteString("# Keyspace\r\n")
+	
+	// 3. Read from your brand new stats array!
+	currentKeys := eviction.KeyspaceStats[0]["keys"]
+	sb.WriteString(fmt.Sprintf("db0:keys=%d,expires=0,avg_ttl=0\r\n", currentKeys))
+
+	
+	if fd != -1 {
+		buff := resp.Encode(sb.String(), false)
+		_, err := unix.Write(fd, buff)
+		return err
+	}
+	return nil
+}
+
 func ResponsewithCommand(cmd *Command, fd int) error {
 	if fd != -1 {
 		log.Println("Command::", cmd)
@@ -274,7 +313,9 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 	case "BGREWRITEAOF":
 		return AppenAofFile(cmd.Args, fd)
 	case "INCR":
-		return ResponseIncr(cmd.Args,fd)
+		return ResponseIncr(cmd.Args, fd)
+	case "INFO":
+		return ResponseInfo(cmd.Args,fd)
 	default:
 		return ResponsePing(cmd.Args, fd)
 	}
