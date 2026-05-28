@@ -8,6 +8,7 @@ import 	"time"
 type Obj struct {
 	Value              interface{}
 	ExpiryAtTimestamps int64
+	LastAccessedTime int64
 }
 
 // a hashmap
@@ -27,17 +28,26 @@ func NewObj(value interface{}, durationMs int64) *Obj {
 	return &Obj{
 		Value:              value,
 		ExpiryAtTimestamps: expiryat,
+		LastAccessedTime:     time.Now().UnixMilli(),
 	}
 
 }
 
 func Put(key string, obj *Obj) {
 
+
+    obj.LastAccessedTime=time.Now().UnixMilli()
 	Store[key] = obj
 }
 
 func Get(key string) *Obj {
-	return Store[key]
+	obj,exists:=Store[key]
+
+	if !exists{
+		return nil
+	}
+	obj.LastAccessedTime = time.Now().UnixMilli()
+	return obj
 
 }
 func Del(key string) bool {
