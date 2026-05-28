@@ -123,7 +123,7 @@ func HandleConnections(portStr string) error {
 
 		for i := 0; i < nEvents; i++ {
 			currFD := int(eventsarr[i].Fd)
-
+			event := eventsarr[i].Events // Grab the specific event flag
 			if currFD == serverFD {
 				clientFD, _, err := unix.Accept(serverFD)
 				if err != nil {
@@ -135,7 +135,6 @@ func HandleConnections(portStr string) error {
 					unix.Close(clientFD)
 					continue
 				}
-
 				clientEvent := unix.EpollEvent{
 					Events: unix.EPOLLIN,
 					Fd:     int32(clientFD),
@@ -144,12 +143,54 @@ func HandleConnections(portStr string) error {
 					log.Println("Failed adding client socket to epoll:", err)
 					unix.Close(clientFD)
 				}
-			} else {
+				continue
+			}
+			if event&unix.EPOLLIN != 0 {
 				err := commands.ProcessClientData(currFD)
 				if err != nil {
 					unix.EpollCtl(epollFD, unix.EPOLL_CTL_DEL, currFD, nil)
 					unix.Close(currFD)
 					commands.CleanUpClient(currFD)
+					continue
+				}
+
+				// OPTIMISTIC WRITE: Data was processed, 
+				// let's try to blast the response back immediately
+				done, err := commands.FlushWriteBuffer(currFD)
+				if err != nil {
+					unix.EpollCtl(epollFD, unix.EPOLL_CTL_DEL, currFD, nil)
+					unix.Close(currFD)
+					commands.CleanUpClient(currFD)
+					continue
+				}
+
+				// THE MAGIC: If `done` is false, it means we hit EAGAIN.
+				// We must tell the kernel to wake us up when the write buffer has free space!
+				if !done {
+					unix.EpollCtl(epollFD, unix.EPOLL_CTL_MOD, currFD, &unix.EpollEvent{
+						Events: unix.EPOLLIN | unix.EPOLLOUT, // Listen for BOTH now
+						Fd:     int32(currFD),
+					})
+				}
+			}
+
+			// 3. HANDLE OUTBOUND SPACE AVAILABLE (EPOLLOUT) Now magic happens 
+			if event&unix.EPOLLOUT != 0 {
+				done, err := commands.FlushWriteBuffer(currFD)
+				if err != nil {
+					unix.EpollCtl(epollFD, unix.EPOLL_CTL_DEL, currFD, nil)
+					unix.Close(currFD)
+					commands.CleanUpClient(currFD)
+					continue
+				}
+
+				// If we successfully flushed the queue, 
+				// turn off EPOLLOUT so the kernel stops spamming us
+				if done {
+					unix.EpollCtl(epollFD, unix.EPOLL_CTL_MOD, currFD, &unix.EpollEvent{
+						Events: unix.EPOLLIN, // Back to read-only mode
+						Fd:     int32(currFD),
+					})
 				}
 			}
 		}
