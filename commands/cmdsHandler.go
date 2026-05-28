@@ -2,7 +2,6 @@ package commands
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -20,13 +19,37 @@ var globalReadBuffer = make([]byte, 4096)
 var outboundBuffers = make(map[int][]byte)
 
 
+func toUpperASCII(s string) string {
+	hasLower := false
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 'a' && s[i] <= 'z' {
+			hasLower = true
+			break
+		}
+	}
+	if !hasLower {
+		return s // Return the exact same string pointer (0 allocations!)
+	}
+	
+	// Only allocate memory if we actually 
+	// need to change lowercase to uppercase
+	b := make([]byte, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'a' && c <= 'z' {
+			c -= 32 
+		}
+		b[i] = c
+	}
+	return string(b)
+}
+
 func QueueWrite(fd int, data []byte) {
 	if fd == -1 {
 		return
 	}
 	outboundBuffers[fd] = append(outboundBuffers[fd], data...)
 }
-
 
 func FlushWriteBuffer(fd int) (done bool, err error) {
 	if len(outboundBuffers[fd]) == 0 {
@@ -40,15 +63,14 @@ func FlushWriteBuffer(fd int) (done bool, err error) {
 		}
 		return false, err // Fatal network error
 	}
-	
-	
+
 	outboundBuffers[fd] = outboundBuffers[fd][n:]
 
 	if len(outboundBuffers[fd]) == 0 {
 		return true, nil // We successfully flushed everything
 	}
 
-	return false, nil 
+	return false, nil
 }
 
 func ResponsePing(args []string, fd int) error {
@@ -296,7 +318,7 @@ func ResponseInfo(args []string, fd int) error {
 	sb.WriteString("# Keyspace\r\n")
 
 	currentKeys := eviction.KeyspaceStats[0]["keys"]
-	sb.WriteString(fmt.Sprintf("db0:keys=%d,expires=0,avg_ttl=0\r\n", currentKeys))
+	sb.WriteString("db0:keys=" + strconv.Itoa(currentKeys) + ",expires=0,avg_ttl=0\r\n")
 
 	if fd != -1 {
 		buff := resp.Encode(sb.String(), false)
@@ -327,7 +349,7 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 		return ResponseInfo(cmd.Args, fd)
 	default:
 		if fd != -1 {
-			errMessage := fmt.Sprintf("-ERR unknown command '%s'\r\n", cmd.Cmd)
+			errMessage := "-ERR unknown command '" + cmd.Cmd + "'\r\n"
 			QueueWrite(fd, []byte(errMessage))
 		}
 		return nil
@@ -362,7 +384,8 @@ func ProcessClientData(fd int) error {
 
 		if err != nil {
 			errStr := err.Error()
-			if strings.Contains(errStr, "insufficient data") || strings.Contains(errStr, "no decoded data") {
+			// OPTIMIZATION: Bypassing the heavy strings.Contains substring match
+			if errStr == "insufficient data" || errStr == "no decoded data" {
 				break
 			}
 			return err
@@ -373,7 +396,8 @@ func ProcessClientData(fd int) error {
 		}
 
 		cmd := &Command{
-			Cmd:  strings.ToUpper(tokens[0]),
+			// OPTIMIZATION: Zero-allocation uppercase if already uppercase
+			Cmd:  toUpperASCII(tokens[0]),
 			Args: tokens[1:],
 		}
 

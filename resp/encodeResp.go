@@ -1,7 +1,8 @@
 package resp
 
 import (
-	"fmt"
+	// "fmt"
+	"strconv"
 )
 
 func Encode(val interface{}, isSimpleString bool) []byte {
@@ -9,14 +10,12 @@ func Encode(val interface{}, isSimpleString bool) []byte {
 
 	case string:
 		if isSimpleString {
-			return []byte(fmt.Sprintf("+%s\r\n", v))
+			return []byte("+" + v + "\r\n")
 		}
 
-		return []byte(
-			fmt.Sprintf("$%d\r\n%s\r\n", len(v), v),
-		)
+		return []byte("$" + strconv.Itoa(len(v)) + "\r\n" + v + "\r\n")
 	case int64:
-		return []byte(fmt.Sprintf(":%d\r\n", v))
+		return []byte(":" + strconv.FormatInt(v, 10) + "\r\n")
 	default:
 		return []byte("$-1\r\n")
 	}
