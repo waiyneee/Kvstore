@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/waiyneee/Kvstore/connection"
 	"github.com/waiyneee/Kvstore/commands"
 	"github.com/waiyneee/Kvstore/persistence"
 	"github.com/waiyneee/Kvstore/resp"
@@ -146,21 +147,21 @@ func HandleConnections(portStr string) error {
 				continue
 			}
 			if event&unix.EPOLLIN != 0 {
-				err := commands.ProcessClientData(currFD)
+				err := ProcessClientData(currFD)
 				if err != nil {
 					unix.EpollCtl(epollFD, unix.EPOLL_CTL_DEL, currFD, nil)
 					unix.Close(currFD)
-					commands.CleanUpClient(currFD)
+					connection.CleanUpClient(currFD)
 					continue
 				}
 
 				// OPTIMISTIC WRITE: Data was processed,
 				// let's try to blast the response back immediately
-				done, err := commands.FlushWriteBuffer(currFD)
+				done, err := connection.FlushWriteBuffer(currFD)
 				if err != nil {
 					unix.EpollCtl(epollFD, unix.EPOLL_CTL_DEL, currFD, nil)
 					unix.Close(currFD)
-					commands.CleanUpClient(currFD)
+					connection.CleanUpClient(currFD)
 					continue
 				}
 
@@ -176,11 +177,11 @@ func HandleConnections(portStr string) error {
 
 			// 3. HANDLE OUTBOUND SPACE AVAILABLE (EPOLLOUT) Now magic happens
 			if event&unix.EPOLLOUT != 0 {
-				done, err := commands.FlushWriteBuffer(currFD)
+				done, err := connection.FlushWriteBuffer(currFD)
 				if err != nil {
 					unix.EpollCtl(epollFD, unix.EPOLL_CTL_DEL, currFD, nil)
 					unix.Close(currFD)
-					commands.CleanUpClient(currFD)
+					connection.CleanUpClient(currFD)
 					continue
 				}
 
