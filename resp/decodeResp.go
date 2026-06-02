@@ -112,7 +112,7 @@ func decodeOneResp(data []byte) (interface{}, int, error) {
 	case '$':
 		return readBulkString(data)
 	default:
-		
+
 		pos := 0
 		for pos < len(data) && data[pos] != '\r' {
 			pos++
@@ -130,7 +130,6 @@ func DecodeArrayString(data []byte) ([]string, int, error) {
 		return nil, 0, err
 	}
 
-	
 	if taskInterface, ok := decodedData.([]interface{}); ok {
 		tokens := make([]string, len(taskInterface))
 		for i := range tokens {

@@ -154,7 +154,7 @@ func HandleConnections(portStr string) error {
 					continue
 				}
 
-				// OPTIMISTIC WRITE: Data was processed, 
+				// OPTIMISTIC WRITE: Data was processed,
 				// let's try to blast the response back immediately
 				done, err := commands.FlushWriteBuffer(currFD)
 				if err != nil {
@@ -174,7 +174,7 @@ func HandleConnections(portStr string) error {
 				}
 			}
 
-			// 3. HANDLE OUTBOUND SPACE AVAILABLE (EPOLLOUT) Now magic happens 
+			// 3. HANDLE OUTBOUND SPACE AVAILABLE (EPOLLOUT) Now magic happens
 			if event&unix.EPOLLOUT != 0 {
 				done, err := commands.FlushWriteBuffer(currFD)
 				if err != nil {
@@ -184,7 +184,7 @@ func HandleConnections(portStr string) error {
 					continue
 				}
 
-				// If we successfully flushed the queue, 
+				// If we successfully flushed the queue,
 				// turn off EPOLLOUT so the kernel stops spamming us
 				if done {
 					unix.EpollCtl(epollFD, unix.EPOLL_CTL_MOD, currFD, &unix.EpollEvent{

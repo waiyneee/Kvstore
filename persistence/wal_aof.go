@@ -12,7 +12,6 @@ import (
 
 var filePath = "./walpersistence.aof"
 
-
 var aofBuffer strings.Builder
 
 func WriteAheadOfLog() error {
@@ -32,8 +31,9 @@ func WriteAheadOfLog() error {
 	}
 	return nil
 }
-// lest experiment 
-//with writitn gonly in memory buffer instead of disk i/o
+
+// lest experiment
+// with writitn gonly in memory buffer instead of disk i/o
 func AppendToAOF(tokens []string) error {
 	aofBuffer.WriteString(fmt.Sprintf("*%d\r\n", len(tokens)))
 	for _, token := range tokens {
@@ -42,7 +42,7 @@ func AppendToAOF(tokens []string) error {
 	return nil
 }
 func SyncAOF() error {
-	
+
 	if aofBuffer.Len() == 0 {
 		return nil
 	}

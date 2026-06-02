@@ -18,7 +18,6 @@ var clientBuffers = make(map[int][]byte)
 var globalReadBuffer = make([]byte, 4096)
 var outboundBuffers = make(map[int][]byte)
 
-
 func toUpperASCII(s string) string {
 	hasLower := false
 	for i := 0; i < len(s); i++ {
@@ -30,14 +29,14 @@ func toUpperASCII(s string) string {
 	if !hasLower {
 		return s // Return the exact same string pointer (0 allocations!)
 	}
-	
-	// Only allocate memory if we actually 
+
+	// Only allocate memory if we actually
 	// need to change lowercase to uppercase
 	b := make([]byte, len(s))
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if c >= 'a' && c <= 'z' {
-			c -= 32 
+			c -= 32
 		}
 		b[i] = c
 	}

@@ -12,7 +12,7 @@ type PoolItem struct {
 
 type EvictionPool struct {
 	pool   []*PoolItem
-	keyset map[string]*PoolItem 
+	keyset map[string]*PoolItem
 }
 
 var ePoolSizeMax int = 16
@@ -23,7 +23,7 @@ var ePool *EvictionPool = &EvictionPool{
 
 func (pq *EvictionPool) Push(key string, lastAccessedTime int64) {
 	if _, ok := pq.keyset[key]; ok {
-		return 
+		return
 	}
 
 	item := &PoolItem{key: key, lastAccessedTime: lastAccessedTime}

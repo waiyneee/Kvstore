@@ -1,25 +1,23 @@
 package eviction
 
 import (
-
 	"github.com/waiyneee/Kvstore/store"
-
 )
 
-func simplefirst(){
-	for k:=range store.Store{
+func simplefirst() {
+	for k := range store.Store {
 		store.Del(k)
-		return 
+		return
 	}
 }
 
-func allKeysRandom(){
-	cnt:=int64(EVICTION_RATIO * float64(LIMIT_KEYS))
+func allKeysRandom() {
+	cnt := int64(EVICTION_RATIO * float64(LIMIT_KEYS))
 
-	for k:=range store.Store{
+	for k := range store.Store {
 		store.Del(k)
 		cnt--
-		if cnt<=0{
+		if cnt <= 0 {
 			break
 		}
 	}
@@ -31,7 +29,7 @@ func allKeysLRU() {
 
 	// Loop 250 times to properly clear the required space
 	for i := int64(0); i < evictCount; i++ {
-		
+
 		// Sample 5 keys PER deletion and toss them in the pool
 		sampleSize := 5
 		for k, obj := range store.Store {

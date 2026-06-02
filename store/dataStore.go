@@ -1,14 +1,11 @@
 package store
 
-import 	"time"
-
-	
-
+import "time"
 
 type Obj struct {
 	Value              interface{}
 	ExpiryAtTimestamps int64
-	LastAccessedTime int64
+	LastAccessedTime   int64
 }
 
 // a hashmap
@@ -28,22 +25,21 @@ func NewObj(value interface{}, durationMs int64) *Obj {
 	return &Obj{
 		Value:              value,
 		ExpiryAtTimestamps: expiryat,
-		LastAccessedTime:     time.Now().UnixMilli(),
+		LastAccessedTime:   time.Now().UnixMilli(),
 	}
 
 }
 
 func Put(key string, obj *Obj) {
 
-
-    obj.LastAccessedTime=time.Now().UnixMilli()
+	obj.LastAccessedTime = time.Now().UnixMilli()
 	Store[key] = obj
 }
 
 func Get(key string) *Obj {
-	obj,exists:=Store[key]
+	obj, exists := Store[key]
 
-	if !exists{
+	if !exists {
 		return nil
 	}
 	obj.LastAccessedTime = time.Now().UnixMilli()
