@@ -21,7 +21,7 @@ func toUpperASCII(s string) string {
 		}
 	}
 	if !hasLower {
-		return s 
+		return s
 	}
 	b := make([]byte, len(s))
 	for i := 0; i < len(s); i++ {

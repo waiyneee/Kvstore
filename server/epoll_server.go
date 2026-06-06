@@ -9,8 +9,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/waiyneee/Kvstore/connection"
 	"github.com/waiyneee/Kvstore/commands"
+	"github.com/waiyneee/Kvstore/connection"
 	"github.com/waiyneee/Kvstore/persistence"
 	"github.com/waiyneee/Kvstore/resp"
 	"github.com/waiyneee/Kvstore/store"
@@ -18,6 +18,7 @@ import (
 
 var (
 	host string = "0.0.0.0"
+    GlobalEpollFD int
 )
 
 func HandleConnections(portStr string) error {
@@ -61,6 +62,9 @@ func HandleConnections(portStr string) error {
 	if err != nil {
 		return err
 	}
+	//just storing this globally 
+	GlobalEpollFD=epollFD
+
 	defer unix.Close(epollFD)
 
 	serverEvent := unix.EpollEvent{
@@ -196,4 +200,13 @@ func HandleConnections(portStr string) error {
 			}
 		}
 	}
+}
+
+
+func RegisterSocket(fd int) error {
+	event := unix.EpollEvent{
+		Events: unix.EPOLLIN,
+		Fd:     int32(fd),
+	}
+	return unix.EpollCtl(GlobalEpollFD, unix.EPOLL_CTL_ADD, fd, &event)
 }

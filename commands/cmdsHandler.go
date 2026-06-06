@@ -1,19 +1,17 @@
 package commands
 
 import (
-	
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/waiyneee/Kvstore/cluster"
+	"github.com/waiyneee/Kvstore/connection"
 	"github.com/waiyneee/Kvstore/eviction"
 	"github.com/waiyneee/Kvstore/persistence"
 	"github.com/waiyneee/Kvstore/resp"
 	"github.com/waiyneee/Kvstore/store"
-	"github.com/waiyneee/Kvstore/cluster"
-	"github.com/waiyneee/Kvstore/connection"
 )
-
 
 func ResponsePing(args []string, fd int) error {
 	var buff []byte
@@ -270,6 +268,18 @@ func ResponseInfo(args []string, fd int) error {
 }
 
 func ResponsewithCommand(cmd *Command, fd int) error {
+   
+	 //if Node is a Leader then only 
+	 //it can mutate else not allowed 
+	if cluster.ServerRole == "FOLLOWER" && 
+		(cmd.Cmd == "SET" || cmd.Cmd == "DEL" || cmd.Cmd == "INCR") {
+		
+		if fd != cluster.LeaderConnectionFD {
+			errMessage := "-READONLY You can't write against a read only replica.\r\n"
+			connection.QueueWrite(fd, []byte(errMessage))
+			return nil
+		}
+	}
 	switch cmd.Cmd {
 	case "PING":
 		return ResponsePing(cmd.Args, fd)
@@ -289,7 +299,7 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 		return ResponseIncr(cmd.Args, fd)
 	case "INFO":
 		return ResponseInfo(cmd.Args, fd)
-	//distribution of systems start from here 
+	//distribution of systems start from here
 	case "REPLICAOF":
 		return cluster.ResponsewithReplica(cmd.Args, fd)
 	default:
@@ -300,4 +310,3 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 		return nil
 	}
 }
-
