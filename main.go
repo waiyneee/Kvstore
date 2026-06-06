@@ -2,8 +2,8 @@ package main
 
 import (
 	"log"
-	"net/http"
-	_ "net/http/pprof"
+	// "net/http"
+	// _ "net/http/pprof"
 	"os"
 
 	"github.com/waiyneee/Kvstore/server"
@@ -11,12 +11,12 @@ import (
 
 func main() {
 
-	go func() {
-		log.Println("Starting pprof diagnostic server on localhost:6060")
-		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
-			log.Fatalf("pprof failed: %v", err)
-		}
-	}()
+	// go func() {
+	// 	log.Println("Starting pprof diagnostic server on localhost:6060")
+	// 	if err := http.ListenAndServe("localhost:6060", nil); err != nil {
+	// 		log.Fatalf("pprof failed: %v", err)
+	// 	}
+	// }()
 
 	// go run main.go port(6379 preferably)
 	arguments := os.Args

@@ -33,9 +33,11 @@ func ResponseSync(args []string, fd int) error {
 				//that is key is dead /expired
 			}
 
-			encoded := resp.EncodeArray(syncCmd)
-			connection.QueueWrite(fd, encoded)
+			
 		}
+
+		encoded := resp.EncodeArray(syncCmd)
+			connection.QueueWrite(fd, encoded)
 
 	}
 

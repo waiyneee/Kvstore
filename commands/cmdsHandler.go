@@ -69,10 +69,11 @@ func ResponseSetKv(args []string, fd int) error {
 		fullCmd := append([]string{"SET"}, args...)
 		persistence.AppendToAOF(fullCmd)
 
-		cluster.BroadcastToReplicas(fullCmd)
-
-		buff := resp.Encode("OK", true)
-		connection.QueueWrite(fd, buff)
+		if fd != cluster.LeaderConnectionFD {
+			cluster.BroadcastToReplicas(fullCmd)
+			buff := resp.Encode("OK", true)
+			connection.QueueWrite(fd, buff)
+		}
 	}
 
 	return nil
@@ -157,11 +158,15 @@ func ResponseDel(args []string, fd int) error {
 			fullCmd := append([]string{"DEL"}, args...)
 			persistence.AppendToAOF(fullCmd)
 
-			cluster.BroadcastToReplicas(fullCmd)
+			if fd != cluster.LeaderConnectionFD {
+				cluster.BroadcastToReplicas(fullCmd)
+			}
 		}
 
-		buff := resp.Encode(int64(cnt), false)
-		connection.QueueWrite(fd, buff)
+		if fd != cluster.LeaderConnectionFD {
+			buff := resp.Encode(int64(cnt), false)
+			connection.QueueWrite(fd, buff)
+		}
 	}
 
 	return nil

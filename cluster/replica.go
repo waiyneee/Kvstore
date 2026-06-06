@@ -8,7 +8,9 @@ import (
 	"github.com/waiyneee/Kvstore/connection"
 	"github.com/waiyneee/Kvstore/resp"
 )
-
+var LeaderConn net.Conn
+//we need this so that garbage collector 
+//doesnt do a cleanup
 func ResponsewithReplica(args []string, fd int) error {
 	if len(args) != 2 {
 		connection.QueueWrite(fd, []byte("-ERR wrong number of arguments for 'ping' command\r\n"))
@@ -32,6 +34,7 @@ func ResponsewithReplica(args []string, fd int) error {
 		connection.QueueWrite(fd, []byte("-ERR unable to connect to leader\r\n"))
 		return nil
 	}
+	LeaderConn = conn
 
 	//now node B send resp command to node A
 	//to announce itself a s a replica
@@ -74,7 +77,6 @@ func ResponsewithReplica(args []string, fd int) error {
 
 	return nil
 }
-
 func BroadcastToReplicas(cmd []string) {
 	if len(ReplicaFDs) == 0 {
 		return // No followers, do nothing
@@ -82,7 +84,20 @@ func BroadcastToReplicas(cmd []string) {
 
 	encoded := resp.EncodeArray(cmd)
 	for _, fd := range ReplicaFDs {
+		// 1. Queue the bytes into the replica's bucket
 		connection.QueueWrite(fd, encoded)
+		done, err := connection.FlushWriteBuffer(fd)
+		if err != nil {
+			continue
+		}
+
+		// wakeup loop 
+		if !done {
+			unix.EpollCtl(connection.GlobalEpollFD, unix.EPOLL_CTL_MOD, fd, &unix.EpollEvent{
+				Events: unix.EPOLLIN | unix.EPOLLOUT,
+				Fd:     int32(fd),
+			})
+		}
 	}
 }
 
