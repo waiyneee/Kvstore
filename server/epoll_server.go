@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/waiyneee/Kvstore/cluster"
 	"github.com/waiyneee/Kvstore/commands"
 	"github.com/waiyneee/Kvstore/connection"
 	"github.com/waiyneee/Kvstore/persistence"
@@ -18,7 +19,6 @@ import (
 
 var (
 	host string = "0.0.0.0"
-    GlobalEpollFD int
 )
 
 func HandleConnections(portStr string) error {
@@ -62,8 +62,8 @@ func HandleConnections(portStr string) error {
 	if err != nil {
 		return err
 	}
-	//just storing this globally 
-	GlobalEpollFD=epollFD
+	//just storing this globally
+	connection.GlobalEpollFD = epollFD
 
 	defer unix.Close(epollFD)
 
@@ -156,6 +156,8 @@ func HandleConnections(portStr string) error {
 					unix.EpollCtl(epollFD, unix.EPOLL_CTL_DEL, currFD, nil)
 					unix.Close(currFD)
 					connection.CleanUpClient(currFD)
+
+					cluster.RemoveReplica(currFD)
 					continue
 				}
 
@@ -200,13 +202,4 @@ func HandleConnections(portStr string) error {
 			}
 		}
 	}
-}
-
-
-func RegisterSocket(fd int) error {
-	event := unix.EpollEvent{
-		Events: unix.EPOLLIN,
-		Fd:     int32(fd),
-	}
-	return unix.EpollCtl(GlobalEpollFD, unix.EPOLL_CTL_ADD, fd, &event)
 }

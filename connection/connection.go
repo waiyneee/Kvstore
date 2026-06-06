@@ -16,6 +16,16 @@ func QueueWrite(fd int, data []byte) {
 	OutboundBuffers[fd] = append(OutboundBuffers[fd], data...)
 }
 
+var GlobalEpollFD int
+
+func RegisterSocket(fd int) error {
+	event := unix.EpollEvent{
+		Events: unix.EPOLLIN,
+		Fd:     int32(fd),
+	}
+	return unix.EpollCtl(GlobalEpollFD, unix.EPOLL_CTL_ADD, fd, &event)
+}
+
 func FlushWriteBuffer(fd int) (done bool, err error) {
 	if len(OutboundBuffers[fd]) == 0 {
 		return true, nil // Nothing to write

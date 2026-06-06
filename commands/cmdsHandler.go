@@ -69,6 +69,8 @@ func ResponseSetKv(args []string, fd int) error {
 		fullCmd := append([]string{"SET"}, args...)
 		persistence.AppendToAOF(fullCmd)
 
+		cluster.BroadcastToReplicas(fullCmd)
+
 		buff := resp.Encode("OK", true)
 		connection.QueueWrite(fd, buff)
 	}
@@ -154,6 +156,8 @@ func ResponseDel(args []string, fd int) error {
 		if cnt > 0 {
 			fullCmd := append([]string{"DEL"}, args...)
 			persistence.AppendToAOF(fullCmd)
+
+			cluster.BroadcastToReplicas(fullCmd)
 		}
 
 		buff := resp.Encode(int64(cnt), false)
@@ -239,6 +243,9 @@ func ResponseIncr(args []string, fd int) error {
 	if fd != -1 {
 		fullCmd := append([]string{"INCR"}, args...)
 		persistence.AppendToAOF(fullCmd)
+
+		cluster.BroadcastToReplicas(fullCmd)
+
 		buff := resp.Encode(newCounter, false)
 		connection.QueueWrite(fd, buff)
 	}
@@ -268,12 +275,12 @@ func ResponseInfo(args []string, fd int) error {
 }
 
 func ResponsewithCommand(cmd *Command, fd int) error {
-   
-	 //if Node is a Leader then only 
-	 //it can mutate else not allowed 
-	if cluster.ServerRole == "FOLLOWER" && 
+
+	//if Node is a Leader then only
+	//it can mutate else not allowed
+	if cluster.ServerRole == "FOLLOWER" &&
 		(cmd.Cmd == "SET" || cmd.Cmd == "DEL" || cmd.Cmd == "INCR") {
-		
+
 		if fd != cluster.LeaderConnectionFD {
 			errMessage := "-READONLY You can't write against a read only replica.\r\n"
 			connection.QueueWrite(fd, []byte(errMessage))
@@ -302,6 +309,11 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 	//distribution of systems start from here
 	case "REPLICAOF":
 		return cluster.ResponsewithReplica(cmd.Args, fd)
+
+	case "SYNC":
+		return cluster.ResponseSync(cmd.Args, fd)
+		//no user must be able to do this apart from raw tcp fds/sockets
+
 	default:
 		if fd != -1 {
 			errMessage := "-ERR unknown command '" + cmd.Cmd + "'\r\n"

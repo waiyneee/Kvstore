@@ -12,7 +12,7 @@ import (
 )
 
 // Zero-allocation uppercase optimization
-func toUpperASCII(s string) string {
+func ToUpperASCII(s string) string {
 	hasLower := false
 	for i := 0; i < len(s); i++ {
 		if s[i] >= 'a' && s[i] <= 'z' {
@@ -68,7 +68,7 @@ func ProcessClientData(fd int) error {
 		}
 
 		cmd := &commands.Command{
-			Cmd:  toUpperASCII(tokens[0]),
+			Cmd:  ToUpperASCII(tokens[0]),
 			Args: tokens[1:],
 		}
 
