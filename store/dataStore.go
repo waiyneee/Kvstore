@@ -16,7 +16,7 @@ var Store = make(map[string]*Obj)
 // 	store=make(map[string]*Obj)
 // }
 
-func NewObj(value interface{}, durationMs int64) *Obj {
+func NewObj(value any, durationMs int64) *Obj {
 	var expiryat int64 = -1
 	if durationMs > 0 {
 		expiryat = time.Now().UnixMilli() + durationMs

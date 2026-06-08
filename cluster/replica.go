@@ -8,9 +8,11 @@ import (
 	"github.com/waiyneee/Kvstore/connection"
 	"github.com/waiyneee/Kvstore/resp"
 )
+
 var LeaderConn net.Conn
-//we need this so that garbage collector 
-//doesnt do a cleanup
+
+// we need this so that garbage collector
+// doesnt do a cleanup
 func ResponsewithReplica(args []string, fd int) error {
 	if len(args) != 2 {
 		connection.QueueWrite(fd, []byte("-ERR wrong number of arguments for 'ping' command\r\n"))
@@ -91,7 +93,7 @@ func BroadcastToReplicas(cmd []string) {
 			continue
 		}
 
-		// wakeup loop 
+		// wakeup loop
 		if !done {
 			unix.EpollCtl(connection.GlobalEpollFD, unix.EPOLL_CTL_MOD, fd, &unix.EpollEvent{
 				Events: unix.EPOLLIN | unix.EPOLLOUT,
