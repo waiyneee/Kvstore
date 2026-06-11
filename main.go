@@ -1,32 +1,22 @@
 package main
 
 import (
+	"flag"
 	"log"
-	// "net/http"
-	// _ "net/http/pprof"
-	"os"
 
+	"github.com/waiyneee/Kvstore/cluster"
 	"github.com/waiyneee/Kvstore/server"
 )
 
 func main() {
+	portFlag := flag.String("port", "9000", "Port to run the database node on")
+	clusterFlag := flag.String("cluster", "127.0.0.1:9000", "Comma-separated list of all nodes in the cluster")
+	flag.Parse()
 
-	// go func() {
-	// 	log.Println("Starting pprof diagnostic server on localhost:6060")
-	// 	if err := http.ListenAndServe("localhost:6060", nil); err != nil {
-	// 		log.Fatalf("pprof failed: %v", err)
-	// 	}
-	// }()
-
-	// go run main.go port(6379 preferably)
-	arguments := os.Args
-	if len(arguments) < 2 {
-		// Used log.Fatal instead of fmt.Printf + os.Exit
-		log.Fatal("Fatal: we got an unexpected length of args here, define your port number please.")
-	}
-	port := os.Args[1]
-
-	err := server.HandleConnections(port)
+	// Bootstrapping: Build the mental map of the cluster.
+	// We pass the string values of the flags into our new Init function.
+	cluster.InitTopology(*portFlag, *clusterFlag)
+	err := server.HandleConnections(*portFlag)
 	if err != nil {
 		log.Fatalf("Fatal: Server runtime crashed: %v\n", err)
 	}
