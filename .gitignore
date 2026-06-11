@@ -1,0 +1,5 @@
+# Build Artifacts
+kvstore
+
+# Database Persistence Files
+*.aof
