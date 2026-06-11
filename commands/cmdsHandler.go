@@ -292,6 +292,18 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 			return nil
 		}
 	}
+
+	isKeyCommand := cmd.Cmd == "SET" || cmd.Cmd == "GET" || cmd.Cmd == "DEL" ||
+		cmd.Cmd == "TTL" || cmd.Cmd == "EXPIRE" || cmd.Cmd == "INCR"
+
+	if isKeyCommand && len(cmd.Args) > 0 {
+		key := cmd.Args[0] // The key is always the first argument
+
+		// Let the cluster package decide if we own this key
+		if cluster.CheckRedirect(key, fd) {
+			return nil
+		}
+	}
 	switch cmd.Cmd {
 	case "PING":
 		return ResponsePing(cmd.Args, fd)

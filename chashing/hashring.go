@@ -12,13 +12,26 @@ type HashRing struct {
 	virtualToNode map[uint32]string
 	vNodeCnt      int
 }
+type Option func(*HashRing)
 
-func New(vNodeCnt int) *HashRing {
-	return &HashRing{
+func WithVirtualNodes(count int) Option {
+	return func(h *HashRing) {
+		h.vNodeCnt = count
+	}
+}
+
+func New(opts ...Option) *HashRing {
+	h := &HashRing{
 		ring:          make([]uint32, 0),
 		virtualToNode: make(map[uint32]string),
-		vNodeCnt:      vNodeCnt,
+		vNodeCnt:      50, // Default value
 	}
+
+	// Apply any options passed in
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 func (h *HashRing) sortRing() {
