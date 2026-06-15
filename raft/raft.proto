@@ -1,0 +1,12 @@
+
+
+syntax="proto3"
+
+
+package raft;
+
+option go_package = "github.com/waiyneee/Kvstore/raft";
+
+message raftNodeServer{
+
+}
