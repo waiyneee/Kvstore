@@ -19,7 +19,7 @@ func main() {
 	go func() {
 		err := raft.StartrpcServer(RaftPort, raftBrain)
 		if err != nil {
-			log.Fatalf("Fatal :Rfat grpc erver crashed abruptly", err)
+			log.Fatal("Fatal :Rfat grpc erver crashed abruptly", err)
 
 		}
 	}()

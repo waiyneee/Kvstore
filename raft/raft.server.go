@@ -41,12 +41,15 @@ type RaftNode struct {
 	state       NodeState
 	commitIndex int64
 	lastApplied int64
+
+	//heartbeats Logic 
+	heartbeats chan struct{}
 }
 
 //as soon as your server boots or starts up it basically starts up
 //as a new state machine role ==follower
 func New(nodeId int32, peerIps []string) *RaftNode {
-	return &RaftNode{
+	rn:= &RaftNode{
 		id:      nodeId,
 		peerIps: peerIps,
 
@@ -54,7 +57,12 @@ func New(nodeId int32, peerIps []string) *RaftNode {
 		votedFor:    -1,
 		log:         make([]*LogEntry, 0),
 		state:       Follower,
+		heartbeats: make(chan struct{},1),
 	}
+
+	//boot the watchDog
+	go rn.runElectionTimer()
+	return rn
 }
 
 func (rn *RaftNode) RequestVote(ctx context.Context, req *RequestVoteRequest) (*RequestVoteResponse, error) {
@@ -124,12 +132,22 @@ func (rn *RaftNode) AppendEntries(ctx context.Context, req *AppendEntriesRequest
 		rn.votedFor = -1
 		rn.state = Follower
 		rn.currentTerm = req.Term
+
+		// rn.heartbeats<-struct{}{}
 	} else if req.Term < rn.currentTerm {
 		return &AppendEntriesResponse{
 			Term:    rn.currentTerm,
 			Success: false,
 		}, nil
 	}
+    
+
+	//thi will rest the timer 
+	select {
+    case 
+	   rn.heartbeats <- struct{}{}:
+    default:
+    }
 
 	rn.state = Follower
 
