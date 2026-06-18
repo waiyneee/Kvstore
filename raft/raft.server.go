@@ -75,7 +75,6 @@ func (rn *RaftNode) RequestVote(ctx context.Context, req *RequestVoteRequest) (*
     if rn.votedFor != -1 && rn.votedFor != req.CandidateId {
         return &RequestVoteResponse{Term: rn.currentTerm, VoteGranted: false}, nil
     }
-
     lastLogIndex := int64(len(rn.log))
     var lastLogTerm int64 = 0
     if lastLogIndex > 0 {

@@ -15,10 +15,12 @@ import (
 	"github.com/waiyneee/Kvstore/persistence"
 	"github.com/waiyneee/Kvstore/resp"
 	"github.com/waiyneee/Kvstore/store"
+	"github.com/waiyneee/Kvstore/raft"
 )
 
 var (
 	host string = "0.0.0.0"
+	RaftBrain *raft.RaftNode
 )
 
 func HandleConnections(portStr string) error {
@@ -31,8 +33,24 @@ func HandleConnections(portStr string) error {
 		port = 6379
 	}
 
+ 
+   
 	log.Printf("Starting pure single-threaded epoll server on %s:%d\n", host, port)
 	maxClients := 10000
+	nodeId :=int32(1)
+	peerIps:=[]string{"127.0.0.10001","127.0.0.10002"}
+	raftPort := 10000
+
+	RaftBrain = raft.New(nodeId, peerIps)
+		go func() {
+			log.Printf("Booting Raft Control Plane on port %d...", raftPort)
+			if err := raft.StartrpcServer(raftPort, RaftBrain); err != nil {
+				log.Fatalf("Fatal: Raft gRPC server crashed: %v", err)
+			}
+		}()
+
+	go startRaftApplierLoop()
+
 
 	serverFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
 	if err != nil {
@@ -202,4 +220,29 @@ func HandleConnections(portStr string) error {
 			}
 		}
 	}
+}
+
+
+func startRaftApplierLoop() {
+    var lastApplied int64 = 0
+    for {
+        commitIndex := RaftBrain.GetCommitIndex()
+        if commitIndex > lastApplied {
+            for i := lastApplied + 1; i <= commitIndex; i++ {
+                entry := RaftBrain.GetLogEntry(i)
+                if entry != nil {
+                    tokens := strings.Fields(entry.Command)
+                    if len(tokens) > 0 {
+                        cmd := &commands.Command{
+                            Cmd:  strings.ToUpper(tokens[0]),
+                            Args: tokens[1:],
+                        }
+                        commands.ResponsewithCommand(cmd, -1)
+                    }
+                }
+                lastApplied = i
+            }
+        }
+        time.Sleep(10 * time.Millisecond)
+    }
 }
