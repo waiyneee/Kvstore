@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/waiyneee/Kvstore/store"
+	"github.com/waiyneee/Kvstore/internal/store"
 )
 
 var filePath = "./walpersistence.aof"

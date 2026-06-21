@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/waiyneee/Kvstore/chashing"
+	"github.com/waiyneee/Kvstore/internal/chashing"
 
-	"github.com/waiyneee/Kvstore/connection"
+	"github.com/waiyneee/Kvstore/internal/connection"
 )
 
 // Global variables

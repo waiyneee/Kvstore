@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/waiyneee/Kvstore/raft"
+	"github.com/waiyneee/Kvstore/internal/raft"
 )
 
 var (

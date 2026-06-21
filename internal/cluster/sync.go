@@ -4,9 +4,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/waiyneee/Kvstore/connection"
-	"github.com/waiyneee/Kvstore/resp"
-	"github.com/waiyneee/Kvstore/store"
+	"github.com/waiyneee/Kvstore/internal/connection"
+	"github.com/waiyneee/Kvstore/internal/resp"
+	"github.com/waiyneee/Kvstore/internal/store"
 )
 
 func ResponseSync(args []string, fd int) error {

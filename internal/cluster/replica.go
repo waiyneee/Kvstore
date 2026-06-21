@@ -5,8 +5,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/waiyneee/Kvstore/connection"
-	"github.com/waiyneee/Kvstore/resp"
+	"github.com/waiyneee/Kvstore/internal/connection"
+	"github.com/waiyneee/Kvstore/internal/resp"
 )
 
 var LeaderConn net.Conn

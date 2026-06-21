@@ -2,8 +2,8 @@ package commands
 
 
 import (
-	"github.com/waiyneee/Kvstore/connection"
-	"github.com/waiyneee/Kvstore/persistence"
+	"github.com/waiyneee/Kvstore/internal/connection"
+	"github.com/waiyneee/Kvstore/internal/persistence"
 )
 
 

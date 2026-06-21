@@ -1,7 +1,7 @@
 package eviction
 
 import (
-	"github.com/waiyneee/Kvstore/store"
+	"github.com/waiyneee/Kvstore/internal/store"
 )
 
 func simplefirst() {

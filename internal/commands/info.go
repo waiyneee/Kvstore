@@ -4,10 +4,10 @@ import (
 	"strings"
 	"strconv"
 
-	"github.com/waiyneee/Kvstore/eviction"
-	"github.com/waiyneee/Kvstore/store"
-	"github.com/waiyneee/Kvstore/resp"
-	"github.com/waiyneee/Kvstore/connection"
+	"github.com/waiyneee/Kvstore/internal/eviction"
+	"github.com/waiyneee/Kvstore/internal/store"
+	"github.com/waiyneee/Kvstore/internal/resp"
+	"github.com/waiyneee/Kvstore/internal/connection"
 
 )
 

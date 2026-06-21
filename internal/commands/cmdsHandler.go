@@ -1,8 +1,8 @@
 package commands
 
 import (
-	"github.com/waiyneee/Kvstore/cluster"
-	"github.com/waiyneee/Kvstore/connection"
+	"github.com/waiyneee/Kvstore/internal/cluster"
+	"github.com/waiyneee/Kvstore/internal/connection"
 
 )
 
