@@ -1,5 +1,5 @@
 # Build Artifacts
-kvstore
+/kvstore
 
 # Database Persistence Files
 *.aof
