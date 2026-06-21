@@ -5,10 +5,24 @@ import (
 	"github.com/waiyneee/Kvstore/internal/connection"
 )
 
-func ResponsewithCommand(cmd *Command, fd int) error {
+type CommandHandler func(args []string, fd int) error
 
-	//if Node is a Leader then only
-	//it can mutate else not allowed
+var registry = map[string]CommandHandler{
+	"PING":         ResponsePing,
+	"SET":          ResponseSetKv,
+	"GET":          ResponseGetk,
+	"TTL":          ResponseTTl,
+	"DEL":          ResponseDel,
+	"EXPIRE":       ResponseExpire,
+	"BGREWRITEAOF": AppenAofFile,
+	"INCR":         ResponseIncr,
+	"INFO":         ResponseInfo,
+	"REPLICAOF":    cluster.ResponsewithReplica,
+	"SYNC":         cluster.ResponseSync,
+}
+
+func ResponsewithCommand(cmd *Command, fd int) error {
+	// If Node is a Leader then only it can mutate else not allowed
 	if cluster.ServerRole == "FOLLOWER" &&
 		(cmd.Cmd == "SET" || cmd.Cmd == "DEL" || cmd.Cmd == "INCR") {
 
@@ -18,6 +32,7 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 			return nil
 		}
 	}
+
 
 	isKeyCommand := cmd.Cmd == "SET" || cmd.Cmd == "GET" || cmd.Cmd == "DEL" ||
 		cmd.Cmd == "TTL" || cmd.Cmd == "EXPIRE" || cmd.Cmd == "INCR"
@@ -30,38 +45,15 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 			return nil
 		}
 	}
-	switch cmd.Cmd {
-	case "PING":
-		return ResponsePing(cmd.Args, fd)
-	case "SET":
-		return ResponseSetKv(cmd.Args, fd)
-	case "GET":
-		return ResponseGetk(cmd.Args, fd)
-	case "TTL":
-		return ResponseTTl(cmd.Args, fd)
-	case "DEL":
-		return ResponseDel(cmd.Args, fd)
-	case "EXPIRE":
-		return ResponseExpire(cmd.Args, fd)
-	case "BGREWRITEAOF":
-		return AppenAofFile(cmd.Args, fd)
-	case "INCR":
-		return ResponseIncr(cmd.Args, fd)
-	case "INFO":
-		return ResponseInfo(cmd.Args, fd)
-	//distribution of systems start from here
-	case "REPLICAOF":
-		return cluster.ResponsewithReplica(cmd.Args, fd)
-
-	case "SYNC":
-		return cluster.ResponseSync(cmd.Args, fd)
-		//no user must be able to do this apart from raw tcp fds/sockets
-
-	default:
+   
+	//the command registry magic happens here 
+	handler, exists := registry[cmd.Cmd]
+	if !exists {
 		if fd != -1 {
 			errMessage := "-ERR unknown command '" + cmd.Cmd + "'\r\n"
 			connection.QueueWrite(fd, []byte(errMessage))
 		}
 		return nil
 	}
+	return handler(cmd.Args, fd)
 }
