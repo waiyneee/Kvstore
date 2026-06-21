@@ -3,7 +3,6 @@ package server
 import (
 	"log"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -13,89 +12,162 @@ import (
 	"github.com/waiyneee/Kvstore/internal/commands"
 	"github.com/waiyneee/Kvstore/internal/connection"
 	"github.com/waiyneee/Kvstore/internal/persistence"
+	"github.com/waiyneee/Kvstore/internal/raft"
 	"github.com/waiyneee/Kvstore/internal/resp"
 	"github.com/waiyneee/Kvstore/internal/store"
-	"github.com/waiyneee/Kvstore/internal/raft"
 )
 
-var (
-	host string = "0.0.0.0"
-	RaftBrain *raft.RaftNode
-)
+var RaftBrain *raft.RaftNode
 
-func HandleConnections(portStr string) error {
+// Start boots the server, sets up Epoll, and triggers the main loop
+func (s *Server) Start() error {
 	runtime.GOMAXPROCS(1)
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	port, err := strconv.Atoi(portStr)
+	log.Printf("Starting pure single-threaded epoll server on 0.0.0.0:%d\n", s.port)
+
+	RaftBrain = raft.New(s.nodeId, s.peerIPs)
+	go func() {
+		log.Printf("Booting Raft Control Plane on port %d...", s.raftPort)
+		if err := raft.StartrpcServer(s.raftPort, RaftBrain); err != nil {
+			log.Fatalf("Fatal: Raft gRPC server crashed: %v", err)
+		}
+	}()
+
+	go s.startRaftApplierLoop()
+
+	var err error
+	s.serverFD, err = createServerSocket(s.port)
 	if err != nil {
-		port = 6379
+		return err
+	}
+	defer unix.Close(s.serverFD)
+
+	s.epollFD, err = createEpoll()
+	if err != nil {
+		return err
+	}
+	defer unix.Close(s.epollFD)
+
+	connection.GlobalEpollFD = s.epollFD
+
+	if err := addEpollRead(s.epollFD, s.serverFD); err != nil {
+		return err
 	}
 
- 
-   
-	log.Printf("Starting pure single-threaded epoll server on %s:%d\n", host, port)
-	maxClients := 10000
-	nodeId :=int32(1)
-	peerIps:=[]string{"127.0.0.10001","127.0.0.10002"}
-	raftPort := 10000
+	s.restoreAOF()
 
-	RaftBrain = raft.New(nodeId, peerIps)
-		go func() {
-			log.Printf("Booting Raft Control Plane on port %d...", raftPort)
-			if err := raft.StartrpcServer(raftPort, RaftBrain); err != nil {
-				log.Fatalf("Fatal: Raft gRPC server crashed: %v", err)
+	eventsarr := make([]unix.EpollEvent, s.maxClients)
+	cronFrequency := 1 * time.Second
+	lastCronExecTime := time.Now()
+
+	for {
+		now := time.Now()
+		if now.After(lastCronExecTime.Add(cronFrequency)) {
+			store.DeleteExpiredKeys()
+			lastCronExecTime = time.Now()
+		}
+
+		nextCronTime := lastCronExecTime.Add(cronFrequency)
+		timeoutMs := int(time.Until(nextCronTime).Milliseconds())
+		if timeoutMs <= 0 {
+			timeoutMs = 10
+		}
+
+		nEvents, err := unix.EpollWait(s.epollFD, eventsarr, timeoutMs)
+		if err != nil {
+			if err == unix.EINTR {
+				continue
 			}
-		}()
+			log.Println("epoll_wait system error:", err)
+			continue
+		}
 
-	go startRaftApplierLoop()
+		for i := 0; i < nEvents; i++ {
+			s.handleEvent(int(eventsarr[i].Fd), eventsarr[i].Events)
+		}
+	}
+}
 
+// handleEvent routes the specific epoll event to the correct handler
+func (s *Server) handleEvent(fd int, event uint32) {
+	if fd == s.serverFD {
+		s.acceptClient()
+		return
+	}
 
-	serverFD, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
+	if event&unix.EPOLLIN != 0 {
+		s.handleRead(fd)
+	}
+
+	if event&unix.EPOLLOUT != 0 {
+		s.handleWrite(fd)
+	}
+}
+
+func (s *Server) acceptClient() {
+	clientFD, _, err := unix.Accept(s.serverFD)
 	if err != nil {
-		return err
-	}
-	defer unix.Close(serverFD)
-
-	if err := unix.SetsockoptInt(serverFD, unix.SOL_SOCKET, unix.SO_REUSEADDR, 1); err != nil {
-		return err
+		log.Println("Failed to accept raw client connection:", err)
+		return
 	}
 
-	if err := unix.SetNonblock(serverFD, true); err != nil {
-		return err
+	if err := unix.SetNonblock(clientFD, true); err != nil {
+		unix.Close(clientFD)
+		return
 	}
 
-	addr := unix.SockaddrInet4{Port: port}
-	copy(addr.Addr[:], []byte{0, 0, 0, 0})
-	if err := unix.Bind(serverFD, &addr); err != nil {
-		return err
+	if err := addEpollRead(s.epollFD, clientFD); err != nil {
+		log.Println("Failed adding client socket to epoll:", err)
+		unix.Close(clientFD)
+	}
+}
+
+func (s *Server) handleRead(fd int) {
+	if err := ProcessClientData(fd); err != nil {
+		s.cleanupClient(fd)
+		return
 	}
 
-	if err := unix.Listen(serverFD, maxClients); err != nil {
-		return err
-	}
-
-	epollFD, err := unix.EpollCreate1(0)
+	// OPTIMISTIC WRITE: Data was processed,
+	// let's try to blast the response back immediately
+	done, err := connection.FlushWriteBuffer(fd)
 	if err != nil {
-		return err
-	}
-	//just storing this globally
-	connection.GlobalEpollFD = epollFD
-
-	defer unix.Close(epollFD)
-
-	serverEvent := unix.EpollEvent{
-		Events: unix.EPOLLIN,
-		Fd:     int32(serverFD),
+		s.cleanupClient(fd)
+		return
 	}
 
-	if err := unix.EpollCtl(epollFD, unix.EPOLL_CTL_ADD, serverFD, &serverEvent); err != nil {
-		return err
+	// THE MAGIC: If `done` is false, it means we hit EAGAIN.
+	// We must tell the kernel to wake us up when the write buffer has free space!
+	if !done {
+		modEpollReadWrite(s.epollFD, fd)
+	}
+}
+
+func (s *Server) handleWrite(fd int) {
+	// 3. HANDLE OUTBOUND SPACE AVAILABLE (EPOLLOUT) Now magic happens
+	done, err := connection.FlushWriteBuffer(fd)
+	if err != nil {
+		s.cleanupClient(fd)
+		return
 	}
 
-	eventsarr := make([]unix.EpollEvent, maxClients)
+	// If we successfully flushed the queue,
+	// turn off EPOLLOUT so the kernel stops spamming us
+	if done {
+		modEpollRead(s.epollFD, fd)
+	}
+}
 
+func (s *Server) cleanupClient(fd int) {
+	delEpoll(s.epollFD, fd)
+	unix.Close(fd)
+	connection.CleanUpClient(fd)
+	cluster.RemoveReplica(fd)
+}
+
+func (s *Server) restoreAOF() {
 	log.Println("Checking for AOF persistence file...")
 	aofData, _ := persistence.RestoreFromAOF()
 	if len(aofData) > 0 {
@@ -109,140 +181,33 @@ func HandleConnections(portStr string) error {
 				Cmd:  strings.ToUpper(tokens[0]),
 				Args: tokens[1:],
 			}
-
 			commands.ResponsewithCommand(cmd, -1)
-
 			aofData = aofData[consumedBytes:]
 		}
 		log.Println("AOF Restoration complete.")
 	}
-
-	cronFrequency := 1 * time.Second
-	lastCronExecTime := time.Now()
-
-	for {
-		now := time.Now()
-
-		if now.After(lastCronExecTime.Add(cronFrequency)) {
-			store.DeleteExpiredKeys()
-			lastCronExecTime = time.Now()
-		}
-
-		nextCronTime := lastCronExecTime.Add(cronFrequency)
-		timeoutMs := int(time.Until(nextCronTime).Milliseconds())
-
-		if timeoutMs <= 0 {
-			timeoutMs = 10
-		}
-
-		nEvents, err := unix.EpollWait(epollFD, eventsarr, timeoutMs)
-		if err != nil {
-			if err == unix.EINTR {
-				continue
-			}
-			log.Println("epoll_wait system error:", err)
-			continue
-		}
-
-		for i := 0; i < nEvents; i++ {
-			currFD := int(eventsarr[i].Fd)
-			event := eventsarr[i].Events // Grab the specific event flag
-			if currFD == serverFD {
-				clientFD, _, err := unix.Accept(serverFD)
-				if err != nil {
-					log.Println("Failed to accept raw client connection:", err)
-					continue
-				}
-
-				if err := unix.SetNonblock(clientFD, true); err != nil {
-					unix.Close(clientFD)
-					continue
-				}
-				clientEvent := unix.EpollEvent{
-					Events: unix.EPOLLIN,
-					Fd:     int32(clientFD),
-				}
-				if err := unix.EpollCtl(epollFD, unix.EPOLL_CTL_ADD, clientFD, &clientEvent); err != nil {
-					log.Println("Failed adding client socket to epoll:", err)
-					unix.Close(clientFD)
-				}
-				continue
-			}
-			if event&unix.EPOLLIN != 0 {
-				err := ProcessClientData(currFD)
-				if err != nil {
-					unix.EpollCtl(epollFD, unix.EPOLL_CTL_DEL, currFD, nil)
-					unix.Close(currFD)
-					connection.CleanUpClient(currFD)
-
-					cluster.RemoveReplica(currFD)
-					continue
-				}
-
-				// OPTIMISTIC WRITE: Data was processed,
-				// let's try to blast the response back immediately
-				done, err := connection.FlushWriteBuffer(currFD)
-				if err != nil {
-					unix.EpollCtl(epollFD, unix.EPOLL_CTL_DEL, currFD, nil)
-					unix.Close(currFD)
-					connection.CleanUpClient(currFD)
-					continue
-				}
-
-				// THE MAGIC: If `done` is false, it means we hit EAGAIN.
-				// We must tell the kernel to wake us up when the write buffer has free space!
-				if !done {
-					unix.EpollCtl(epollFD, unix.EPOLL_CTL_MOD, currFD, &unix.EpollEvent{
-						Events: unix.EPOLLIN | unix.EPOLLOUT, // Listen for BOTH now
-						Fd:     int32(currFD),
-					})
-				}
-			}
-
-			// 3. HANDLE OUTBOUND SPACE AVAILABLE (EPOLLOUT) Now magic happens
-			if event&unix.EPOLLOUT != 0 {
-				done, err := connection.FlushWriteBuffer(currFD)
-				if err != nil {
-					unix.EpollCtl(epollFD, unix.EPOLL_CTL_DEL, currFD, nil)
-					unix.Close(currFD)
-					connection.CleanUpClient(currFD)
-					continue
-				}
-
-				// If we successfully flushed the queue,
-				// turn off EPOLLOUT so the kernel stops spamming us
-				if done {
-					unix.EpollCtl(epollFD, unix.EPOLL_CTL_MOD, currFD, &unix.EpollEvent{
-						Events: unix.EPOLLIN, // Back to read-only mode
-						Fd:     int32(currFD),
-					})
-				}
-			}
-		}
-	}
 }
 
-
-func startRaftApplierLoop() {
-    var lastApplied int64 = 0
-    for {
-        commitIndex := RaftBrain.GetCommitIndex()
-        if commitIndex > lastApplied {
-            for i := lastApplied + 1; i <= commitIndex; i++ {
-                entry := RaftBrain.GetLogEntry(i)
-                if entry != nil {
-                    tokens := strings.Fields(entry.Command)
-                    if len(tokens) > 0 {
-                        cmd := &commands.Command{
-                            Cmd:  strings.ToUpper(tokens[0]),
-                            Args: tokens[1:],
-                        }
-                        commands.ResponsewithCommand(cmd, -1)
-                    }
-                }
-                lastApplied = i
-            }
-        }
-        time.Sleep(10 * time.Millisecond)
-    }
+func (s *Server) startRaftApplierLoop() {
+	var lastApplied int64 = 0
+	for {
+		commitIndex := RaftBrain.GetCommitIndex()
+		if commitIndex > lastApplied {
+			for i := lastApplied + 1; i <= commitIndex; i++ {
+				entry := RaftBrain.GetLogEntry(i)
+				if entry != nil {
+					tokens := strings.Fields(entry.Command)
+					if len(tokens) > 0 {
+						cmd := &commands.Command{
+							Cmd:  strings.ToUpper(tokens[0]),
+							Args: tokens[1:],
+						}
+						commands.ResponsewithCommand(cmd, -1)
+					}
+				}
+				lastApplied = i
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

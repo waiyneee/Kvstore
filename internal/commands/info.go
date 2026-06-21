@@ -1,16 +1,14 @@
-package commands 
+package commands
 
 import (
-	"strings"
 	"strconv"
+	"strings"
 
-	"github.com/waiyneee/Kvstore/internal/eviction"
-	"github.com/waiyneee/Kvstore/internal/store"
-	"github.com/waiyneee/Kvstore/internal/resp"
 	"github.com/waiyneee/Kvstore/internal/connection"
-
+	"github.com/waiyneee/Kvstore/internal/eviction"
+	"github.com/waiyneee/Kvstore/internal/resp"
+	"github.com/waiyneee/Kvstore/internal/store"
 )
-
 
 func ResponseInfo(args []string, fd int) error {
 	eviction.UpdateDBStat(0, "keys", len(store.Store))
@@ -25,8 +23,8 @@ func ResponseInfo(args []string, fd int) error {
 
 	currentKeys := eviction.KeyspaceStats[0]["keys"]
 
-	sb.WriteString("db0:keys=");
-	sb.WriteString(strconv.Itoa(currentKeys));
+	sb.WriteString("db0:keys=")
+	sb.WriteString(strconv.Itoa(currentKeys))
 	sb.WriteString(",expires=0,avg_ttl=0\r\n")
 
 	if fd != -1 {

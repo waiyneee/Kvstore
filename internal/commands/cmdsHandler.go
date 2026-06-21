@@ -3,9 +3,7 @@ package commands
 import (
 	"github.com/waiyneee/Kvstore/internal/cluster"
 	"github.com/waiyneee/Kvstore/internal/connection"
-
 )
-
 
 func ResponsewithCommand(cmd *Command, fd int) error {
 

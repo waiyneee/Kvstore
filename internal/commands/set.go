@@ -1,13 +1,13 @@
-package commands 
+package commands
 
 import (
+	"github.com/waiyneee/Kvstore/internal/cluster"
 	"github.com/waiyneee/Kvstore/internal/connection"
-	"github.com/waiyneee/Kvstore/internal/resp"
-	"github.com/waiyneee/Kvstore/internal/store"
 	"github.com/waiyneee/Kvstore/internal/eviction"
 	"github.com/waiyneee/Kvstore/internal/persistence"
-	"github.com/waiyneee/Kvstore/internal/cluster"
-	
+	"github.com/waiyneee/Kvstore/internal/resp"
+	"github.com/waiyneee/Kvstore/internal/store"
+
 	"strconv"
 )
 

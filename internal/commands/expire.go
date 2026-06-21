@@ -1,15 +1,12 @@
-
-package commands 
+package commands
 
 import (
-
 	"strconv"
 	"time"
 
 	"github.com/waiyneee/Kvstore/internal/connection"
-	"github.com/waiyneee/Kvstore/internal/store"
 	"github.com/waiyneee/Kvstore/internal/persistence"
-
+	"github.com/waiyneee/Kvstore/internal/store"
 )
 
 func ResponseExpire(args []string, fd int) error {

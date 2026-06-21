@@ -2,7 +2,7 @@ package commands
 
 import (
 	"github.com/waiyneee/Kvstore/internal/connection"
-    "github.com/waiyneee/Kvstore/internal/resp"
+	"github.com/waiyneee/Kvstore/internal/resp"
 )
 
 func ResponsePing(args []string, fd int) error {

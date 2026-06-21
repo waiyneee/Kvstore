@@ -1,4 +1,4 @@
-package commands 
+package commands
 
 import (
 	"github.com/waiyneee/Kvstore/internal/connection"
@@ -6,7 +6,6 @@ import (
 	"github.com/waiyneee/Kvstore/internal/store"
 	"time"
 )
-
 
 func ResponseTTl(args []string, fd int) error {
 	if len(args) != 1 {
