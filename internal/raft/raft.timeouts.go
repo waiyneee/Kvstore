@@ -61,6 +61,14 @@ func (rn *RaftNode) startCampaign(campaignTerm int64) {
 	votesReceived := 1
 	totalNodes := len(rn.peerIps) + 1
 	votesNeeded := (totalNodes / 2) + 1
+	//what if a single node is there ??
+	if len(rn.peerIps) == 0 {
+		rn.state = Leader
+		log.Printf("[RAFT]---->Node %d is the new Leader for the term %d standlaone{node}", rn.id, rn.currentTerm)
+		rn.mu.Unlock()
+
+		return
+	}
 	rn.mu.Unlock()
 
 	voteCh := make(chan bool, len(rn.peerIps))

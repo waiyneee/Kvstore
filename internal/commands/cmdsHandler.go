@@ -3,6 +3,7 @@ package commands
 import (
 	"github.com/waiyneee/Kvstore/internal/cluster"
 	"github.com/waiyneee/Kvstore/internal/connection"
+	"github.com/waiyneee/Kvstore/internal/persistence"
 )
 
 type CommandHandler func(args []string, fd int) error
@@ -33,7 +34,6 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 		}
 	}
 
-
 	isKeyCommand := cmd.Cmd == "SET" || cmd.Cmd == "GET" || cmd.Cmd == "DEL" ||
 		cmd.Cmd == "TTL" || cmd.Cmd == "EXPIRE" || cmd.Cmd == "INCR"
 
@@ -45,8 +45,8 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 			return nil
 		}
 	}
-   
-	//the command registry magic happens here 
+
+	//the command registry magic happens here
 	handler, exists := registry[cmd.Cmd]
 	if !exists {
 		if fd != -1 {
@@ -55,5 +55,20 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 		}
 		return nil
 	}
-	return handler(cmd.Args, fd)
+	err := handler(cmd.Args, fd)
+
+	if err != nil {
+		return err
+	}
+
+	if cmd.Cmd == "SET" || cmd.Cmd == "DEL" || cmd.Cmd == "EXPIRE" || cmd.Cmd == "INCR" {
+		fullCmd := append([]string{cmd.Cmd}, cmd.Args...)
+		persistence.AppendToAOF(fullCmd)
+
+		// For debugging manual tests, flush to disk immediately so i  can see it.
+		// (We will move this to a 1-second cron job for production speed later).
+		persistence.SyncAOF()
+	}
+
+	return err
 }
