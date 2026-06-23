@@ -27,7 +27,7 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 	if cluster.ServerRole == "FOLLOWER" &&
 		(cmd.Cmd == "SET" || cmd.Cmd == "DEL" || cmd.Cmd == "INCR") {
 
-		if fd != cluster.LeaderConnectionFD {
+		if fd != -1 && fd != cluster.LeaderConnectionFD {
 			errMessage := "-READONLY You can't write against a read only replica.\r\n"
 			connection.QueueWrite(fd, []byte(errMessage))
 			return nil
@@ -57,17 +57,25 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 	}
 	err := handler(cmd.Args, fd)
 
-	if err != nil {
-		return err
-	}
+	if err == nil && fd != -1 {
 
-	if cmd.Cmd == "SET" || cmd.Cmd == "DEL" || cmd.Cmd == "EXPIRE" || cmd.Cmd == "INCR" {
-		fullCmd := append([]string{cmd.Cmd}, cmd.Args...)
-		persistence.AppendToAOF(fullCmd)
+		//  Validate
+		isValid := true
+		if (cmd.Cmd == "INCR" || cmd.Cmd == "DEL" ||
+			cmd.Cmd == "EXPIRE" || cmd.Cmd == "TTL") &&
+			len(cmd.Args) != 1 {
+			isValid = false
+		}
+		if cmd.Cmd == "SET" && len(cmd.Args) < 2 {
+			isValid = false
+		}
 
-		// For debugging manual tests, flush to disk immediately so i  can see it.
-		// (We will move this to a 1-second cron job for production speed later).
-		persistence.SyncAOF()
+		if isValid && (cmd.Cmd == "SET" || cmd.Cmd == "DEL" ||
+			cmd.Cmd == "EXPIRE" || cmd.Cmd == "INCR") {
+			fullCmd := append([]string{cmd.Cmd}, cmd.Args...)
+			persistence.AppendToAOF(fullCmd)
+			persistence.SyncAOF()
+		}
 	}
 
 	return err
