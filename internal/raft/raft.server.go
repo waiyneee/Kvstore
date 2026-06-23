@@ -115,10 +115,17 @@ func (rn *RaftNode) AppendEntries(ctx context.Context, req *AppendEntriesRequest
 		}
 	}
 
-	if req.PrevLogIndex == 0 {
-		rn.log = req.Entries
-	} else {
-		rn.log = append(rn.log[:req.PrevLogIndex], req.Entries...)
+	insertIndex := req.PrevLogIndex
+	for _, entry := range req.Entries {
+		if insertIndex < int64(len(rn.log)) {
+			if rn.log[insertIndex].Term != entry.Term {
+				rn.log = rn.log[:insertIndex]
+				rn.log = append(rn.log, entry)
+			}
+		} else {
+			rn.log = append(rn.log, entry)
+		}
+		insertIndex++
 	}
 
 	if req.LeaderCommit > rn.commitIndex {
@@ -129,7 +136,6 @@ func (rn *RaftNode) AppendEntries(ctx context.Context, req *AppendEntriesRequest
 			rn.commitIndex = lastNewEntry
 		}
 	}
-
 	return &AppendEntriesResponse{Term: rn.currentTerm, Success: true}, nil
 }
 

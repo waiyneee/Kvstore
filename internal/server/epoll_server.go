@@ -8,13 +8,14 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/waiyneee/Kvstore/internal/cluster"
+
 	"github.com/waiyneee/Kvstore/internal/commands"
 	"github.com/waiyneee/Kvstore/internal/connection"
 	"github.com/waiyneee/Kvstore/internal/persistence"
 	"github.com/waiyneee/Kvstore/internal/raft"
 	"github.com/waiyneee/Kvstore/internal/resp"
 	"github.com/waiyneee/Kvstore/internal/store"
+	"github.com/waiyneee/Kvstore/internal/statebridge"
 )
 
 var RaftBrain *raft.RaftNode
@@ -28,6 +29,8 @@ func (s *Server) Start() error {
 	log.Printf("Starting pure single-threaded epoll server on 0.0.0.0:%d\n", s.port)
 
 	RaftBrain = raft.New(s.nodeId, s.peerIPs)
+
+	statebridge.GlobalRaft = RaftBrain
 	go func() {
 		log.Printf("Booting Raft Control Plane on port %d...", s.raftPort)
 		if err := raft.StartrpcServer(s.raftPort, RaftBrain); err != nil {
@@ -63,17 +66,8 @@ func (s *Server) Start() error {
 	lastCronExecTime := time.Now()
 
 	for {
-		now := time.Now()
-		if now.After(lastCronExecTime.Add(cronFrequency)) {
-			store.DeleteExpiredKeys()
-			lastCronExecTime = time.Now()
-		}
-
-		nextCronTime := lastCronExecTime.Add(cronFrequency)
-		timeoutMs := int(time.Until(nextCronTime).Milliseconds())
-		if timeoutMs <= 0 {
-			timeoutMs = 10
-		}
+		var timeoutMs int
+		lastCronExecTime, timeoutMs = s.handleCronJobs(lastCronExecTime, cronFrequency)
 
 		nEvents, err := unix.EpollWait(s.epollFD, eventsarr, timeoutMs)
 		if err != nil {
@@ -90,7 +84,24 @@ func (s *Server) Start() error {
 	}
 }
 
-// handleEvent routes the specific epoll event to the correct handler
+func (s *Server) handleCronJobs(lastCronTime time.Time, freq time.Duration) (time.Time, int) {
+	now := time.Now()
+
+	if now.After(lastCronTime.Add(freq)) {
+		store.DeleteExpiredKeys()
+
+		lastCronTime = time.Now()
+	}
+
+	timeoutMs := int(time.Until(lastCronTime.Add(freq)).Milliseconds())
+	if timeoutMs <= 0 {
+		timeoutMs = 10
+	}
+
+	return lastCronTime, timeoutMs
+}
+
+// handleEvent routes
 func (s *Server) handleEvent(fd int, event uint32) {
 	if fd == s.serverFD {
 		s.acceptClient()
@@ -130,31 +141,24 @@ func (s *Server) handleRead(fd int) {
 		return
 	}
 
-	// OPTIMISTIC WRITE: Data was processed,
-	// let's try to blast the response back immediately
 	done, err := connection.FlushWriteBuffer(fd)
 	if err != nil {
 		s.cleanupClient(fd)
 		return
 	}
 
-	// THE MAGIC: If `done` is false, it means we hit EAGAIN.
-	// We must tell the kernel to wake us up when the write buffer has free space!
 	if !done {
 		modEpollReadWrite(s.epollFD, fd)
 	}
 }
 
 func (s *Server) handleWrite(fd int) {
-	// 3. HANDLE OUTBOUND SPACE AVAILABLE (EPOLLOUT) Now magic happens
 	done, err := connection.FlushWriteBuffer(fd)
 	if err != nil {
 		s.cleanupClient(fd)
 		return
 	}
 
-	// If we successfully flushed the queue,
-	// turn off EPOLLOUT so the kernel stops spamming us
 	if done {
 		modEpollRead(s.epollFD, fd)
 	}
@@ -164,7 +168,7 @@ func (s *Server) cleanupClient(fd int) {
 	delEpoll(s.epollFD, fd)
 	unix.Close(fd)
 	connection.CleanUpClient(fd)
-	cluster.RemoveReplica(fd)
+
 }
 
 func (s *Server) restoreAOF() {
@@ -190,24 +194,34 @@ func (s *Server) restoreAOF() {
 
 func (s *Server) startRaftApplierLoop() {
 	var lastApplied int64 = 0
+
 	for {
-		commitIndex := RaftBrain.GetCommitIndex()
-		if commitIndex > lastApplied {
-			for i := lastApplied + 1; i <= commitIndex; i++ {
-				entry := RaftBrain.GetLogEntry(i)
-				if entry != nil {
-					tokens := strings.Fields(entry.Command)
-					if len(tokens) > 0 {
-						cmd := &commands.Command{
-							Cmd:  strings.ToUpper(tokens[0]),
-							Args: tokens[1:],
-						}
-						commands.ResponsewithCommand(cmd, -1)
-					}
-				}
-				lastApplied = i
-			}
-		}
 		time.Sleep(10 * time.Millisecond)
+
+		commitIndex := RaftBrain.GetCommitIndex()
+		if commitIndex <= lastApplied {
+			continue
+		}
+
+		for i := lastApplied + 1; i <= commitIndex; i++ {
+			entry := RaftBrain.GetLogEntry(i)
+			if entry == nil {
+				continue
+			}
+			tokens, _, err := resp.DecodeArrayString([]byte(entry.Command))
+
+			if err != nil || len(tokens) == 0 {
+				lastApplied = i
+				continue
+			}
+
+			cmd := &commands.Command{
+				Cmd:  strings.ToUpper(tokens[0]),
+				Args: tokens[1:],
+			}
+
+			commands.ResponsewithCommand(cmd, -1)
+			lastApplied = i
+		}
 	}
 }

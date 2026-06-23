@@ -3,7 +3,7 @@ package commands
 import (
 	"strconv"
 
-	"github.com/waiyneee/Kvstore/internal/cluster"
+
 	"github.com/waiyneee/Kvstore/internal/connection"
 	"github.com/waiyneee/Kvstore/internal/eviction"
 	"github.com/waiyneee/Kvstore/internal/resp"
@@ -43,10 +43,6 @@ func ResponseIncr(args []string, fd int) error {
 	}
 
 	if fd != -1 {
-		fullCmd := append([]string{"INCR"}, args...)
-
-		cluster.BroadcastToReplicas(fullCmd)
-
 		buff := resp.Encode(newCounter, false)
 		connection.QueueWrite(fd, buff)
 	}

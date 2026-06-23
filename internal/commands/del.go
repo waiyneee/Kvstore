@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"github.com/waiyneee/Kvstore/internal/cluster"
 	"github.com/waiyneee/Kvstore/internal/connection"
 	"github.com/waiyneee/Kvstore/internal/resp"
 	"github.com/waiyneee/Kvstore/internal/store"
@@ -21,18 +20,8 @@ func ResponseDel(args []string, fd int) error {
 	}
 
 	if fd != -1 {
-		if cnt > 0 {
-			fullCmd := append([]string{"DEL"}, args...)
-
-			if fd != cluster.LeaderConnectionFD {
-				cluster.BroadcastToReplicas(fullCmd)
-			}
-		}
-
-		if fd != cluster.LeaderConnectionFD {
-			buff := resp.Encode(int64(cnt), false)
-			connection.QueueWrite(fd, buff)
-		}
+		buff := resp.Encode(int64(cnt), false)
+		connection.QueueWrite(fd, buff)
 	}
 
 	return nil

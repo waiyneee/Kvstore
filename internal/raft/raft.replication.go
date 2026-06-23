@@ -15,6 +15,15 @@ func (rn *RaftNode) replicateToPeer(peer string) {
 	tlsConfig := &tls.Config{InsecureSkipVerify: true}
 	creds := credentials.NewTLS(tlsConfig)
 
+	// DIAL ONCE OUTSIDE THE LOOP! gRPC will auto-reconnect if the peer goes down.
+	conn, err := grpc.NewClient(peer, grpc.WithTransportCredentials(creds))
+	if err != nil {
+		log.Printf("[RAFT] Failed to initial dial peer %s: %v", peer, err)
+		return
+	}
+	defer conn.Close()
+	client := NewRaftLeaderElectionClient(conn)
+
 	for {
 		rn.mu.Lock()
 		if rn.state != Leader {
@@ -51,16 +60,7 @@ func (rn *RaftNode) replicateToPeer(peer string) {
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*50)
-		conn, err := grpc.DialContext(ctx, peer, grpc.WithTransportCredentials(creds))
-		if err != nil {
-			cancel()
-			time.Sleep(time.Millisecond * 50)
-			continue
-		}
-
-		client := NewRaftLeaderElectionClient(conn)
-		res, err := client.AppendEntries(ctx, req)
-		conn.Close()
+		res, err := client.AppendEntries(ctx, req) // USING THE CLIENT WE BUILT ABOVE
 		cancel()
 
 		if err == nil {
@@ -83,9 +83,9 @@ func (rn *RaftNode) replicateToPeer(peer string) {
 			}
 			rn.mu.Unlock()
 		}
-
 		time.Sleep(time.Millisecond * 50)
 	}
+
 }
 
 func (rn *RaftNode) advanceCommitIndex() {
