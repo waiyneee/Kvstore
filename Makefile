@@ -1,36 +1,43 @@
-.PHONY: build node1 node2 node3 test-ring kill-cluster clean
+.PHONY: build node1 node2 node3 test-single test-ring kill-cluster clean
 
 BINARY_NAME=kvstore
-CLUSTER_NODES=127.0.0.1:9000,127.0.0.1:9001,127.0.0.1:9002
+CMD_DIR=./cmd/kvstore
 
 build:
 	@echo "Building the Kvstore binary..."
-	@go build -o $(BINARY_NAME) main.go
+	@go build -o $(BINARY_NAME) $(CMD_DIR)
+	@echo "Build complete! Artifact created: ./$(BINARY_NAME)"
 
+# Testing a standalone node (No peers)
+test-single: build
+	@echo "Booting a Standalone Node for Command Testing..."
+	./$(BINARY_NAME) start --node-id 1 --port 6379 --raft-port 10001 --peer-ips ""
+
+# 3-Node Cluster Setup (We can expand this to 5 later)
 node1: build
-	@echo "Booting Node 1 (Port 9000)..."
-	./$(BINARY_NAME) -port=9000 -cluster="$(CLUSTER_NODES)"
+	@echo "Booting Node 1 (Epoll: 6379, Raft: 10001)..."
+	./$(BINARY_NAME) start --node-id 1 --port 6379 --raft-port 10001 --peer-ips 127.0.0.1:10002,127.0.0.1:10003
 
 node2: build
-	@echo "Booting Node 2 (Port 9001)..."
-	./$(BINARY_NAME) -port=9001 -cluster="$(CLUSTER_NODES)"
+	@echo "Booting Node 2 (Epoll: 6380, Raft: 10002)..."
+	./$(BINARY_NAME) start --node-id 2 --port 6380 --raft-port 10002 --peer-ips 127.0.0.1:10001,127.0.0.1:10003
 
 node3: build
-	@echo "Booting Node 3 (Port 9002)..."
-	./$(BINARY_NAME) -port=9002 -cluster="$(CLUSTER_NODES)"
+	@echo "Booting Node 3 (Epoll: 6381, Raft: 10003)..."
+	./$(BINARY_NAME) start --node-id 3 --port 6381 --raft-port 10003 --peer-ips 127.0.0.1:10001,127.0.0.1:10002
 
 test-ring:
 	@echo "Running Consistent Hashing Simulation..."
 	@cd chashing && go test -v
 
 kill-cluster:
-	@echo "Hunting down and terminating ghost nodes on ports 9000, 9001, 9002..."
-	-fuser -k 9000/tcp 2>/dev/null || true
-	-fuser -k 9001/tcp 2>/dev/null || true
-	-fuser -k 9002/tcp 2>/dev/null || true
+	@echo "Hunting down and terminating ghost nodes..."
+	-fuser -k 6379/tcp 6380/tcp 6381/tcp 2>/dev/null || true
+	-fuser -k 10001/tcp 10002/tcp 10003/tcp 2>/dev/null || true
 	@echo "Ports cleared."
 
 clean: kill-cluster
 	@echo "Cleaning up binaries and AOF files..."
 	@rm -f $(BINARY_NAME)
 	@rm -f *.aof
+	@echo "Environment pristine."
