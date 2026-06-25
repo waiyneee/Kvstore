@@ -7,6 +7,8 @@ import (
 	"net"
 	"sync"
 
+	"github.com/waiyneee/Kvstore/internal/cluster"
+
 	"google.golang.org/grpc"
 )
 
@@ -69,6 +71,9 @@ func (rn *RaftNode) RequestVote(ctx context.Context, req *RequestVoteRequest) (*
 		rn.currentTerm = req.Term
 		rn.state = Follower
 		rn.votedFor = -1
+
+		cluster.ServerRole="FOLLOWER"
+		
 	}
 
 	if rn.votedFor != -1 && rn.votedFor != req.CandidateId {
@@ -85,6 +90,13 @@ func (rn *RaftNode) RequestVote(ctx context.Context, req *RequestVoteRequest) (*
 	}
 
 	rn.votedFor = req.CandidateId
+	//as soon as a node has voted someone he has to basically
+	// //reset its own election timer
+	select {
+	case rn.heartbeats <- struct{}{}:
+	default:
+
+	}
 	return &RequestVoteResponse{Term: rn.currentTerm, VoteGranted: true}, nil
 }
 
@@ -96,6 +108,8 @@ func (rn *RaftNode) AppendEntries(ctx context.Context, req *AppendEntriesRequest
 		rn.votedFor = -1
 		rn.state = Follower
 		rn.currentTerm = req.Term
+
+		cluster.ServerRole ="FOLLOWER"
 	} else if req.Term < rn.currentTerm {
 		return &AppendEntriesResponse{Term: rn.currentTerm, Success: false}, nil
 	}
@@ -105,6 +119,7 @@ func (rn *RaftNode) AppendEntries(ctx context.Context, req *AppendEntriesRequest
 	default:
 	}
 	rn.state = Follower
+	cluster.ServerRole="FOLLOWER"
 
 	if req.PrevLogIndex > 0 {
 		if int64(len(rn.log)) < req.PrevLogIndex {

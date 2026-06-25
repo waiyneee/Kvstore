@@ -2,13 +2,14 @@ package raft
 
 import (
 	"context"
-	"crypto/tls"
+	//"crypto/tls"
 	"log"
 	"math/rand"
 	"time"
 
+	"github.com/waiyneee/Kvstore/internal/cluster"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func (rn *RaftNode) runElectionTimer() {
@@ -64,6 +65,9 @@ func (rn *RaftNode) startCampaign(campaignTerm int64) {
 	//what if a single node is there ??
 	if len(rn.peerIps) == 0 {
 		rn.state = Leader
+
+		cluster.ServerRole="Leader"
+	
 		log.Printf("[RAFT]---->Node %d is the new Leader for the term %d standlaone{node}", rn.id, rn.currentTerm)
 		rn.mu.Unlock()
 
@@ -76,15 +80,15 @@ func (rn *RaftNode) startCampaign(campaignTerm int64) {
 	// Production TLS config - SkipVerify for local dev, configure CAs for production
 	// //grpc/creddentials are still there
 	// //do not run it on production YETT
-	tlsConfig := &tls.Config{InsecureSkipVerify: true}
-	creds := credentials.NewTLS(tlsConfig)
+	//tlsConfig := &tls.Config{InsecureSkipVerify: true}
+	//creds := credentials.NewTLS(tlsConfig)
 
 	for _, peerIP := range rn.peerIps {
 		go func(peer string) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
 			defer cancel()
 
-			conn, err := grpc.DialContext(ctx, peer, grpc.WithTransportCredentials(creds))
+			conn, err := grpc.DialContext(ctx, peer, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				voteCh <- false
 				return
@@ -105,6 +109,14 @@ func (rn *RaftNode) startCampaign(campaignTerm int64) {
 				rn.currentTerm = res.Term
 				rn.state = Follower
 				rn.votedFor = -1
+
+				//reset your timer on stepdown
+				select {
+					case rn.heartbeats <-struct{}{}:
+					default:
+				}
+
+				cluster.ServerRole="Leader"
 				voteCh <- false
 				return
 			}
@@ -131,6 +143,8 @@ func (rn *RaftNode) startCampaign(campaignTerm int64) {
 			votesReceived++
 			if votesReceived >= votesNeeded {
 				rn.state = Leader
+
+				cluster.ServerRole="Leader"
 				log.Printf("[RAFT] ---> NODE %d IS THE NEW LEADER FOR TERM %d! <---", rn.id, rn.currentTerm)
 
 				for _, p := range rn.peerIps {

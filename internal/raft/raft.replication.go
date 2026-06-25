@@ -2,21 +2,23 @@ package raft
 
 import (
 	"context"
-	"crypto/tls"
+	// "crypto/tls"
 	"log"
 	"sort"
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/waiyneee/Kvstore/internal/cluster"
 )
 
 func (rn *RaftNode) replicateToPeer(peer string) {
-	tlsConfig := &tls.Config{InsecureSkipVerify: true}
-	creds := credentials.NewTLS(tlsConfig)
+	//	tlsConfig := &tls.Config{InsecureSkipVerify: true}
+	//creds := credentials.NewTLS(tlsConfig)
 
 	// DIAL ONCE OUTSIDE THE LOOP! gRPC will auto-reconnect if the peer goes down.
-	conn, err := grpc.NewClient(peer, grpc.WithTransportCredentials(creds))
+	conn, err := grpc.NewClient(peer, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Printf("[RAFT] Failed to initial dial peer %s: %v", peer, err)
 		return
@@ -59,7 +61,7 @@ func (rn *RaftNode) replicateToPeer(peer string) {
 			LeaderCommit: leaderCommit,
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*50)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*200)
 		res, err := client.AppendEntries(ctx, req) // USING THE CLIENT WE BUILT ABOVE
 		cancel()
 
@@ -69,6 +71,8 @@ func (rn *RaftNode) replicateToPeer(peer string) {
 				rn.currentTerm = res.Term
 				rn.state = Follower
 				rn.votedFor = -1
+
+				cluster.ServerRole="FOLLOWER"
 			} else if rn.state == Leader && term == rn.currentTerm {
 				if res.Success {
 					rn.nextIndex[peer] = nextIdx + int64(len(entries))
@@ -82,6 +86,8 @@ func (rn *RaftNode) replicateToPeer(peer string) {
 				}
 			}
 			rn.mu.Unlock()
+		}else{
+			log.Printf("[RAFT] replication  error to peer %s:%v",peer,err)
 		}
 		time.Sleep(time.Millisecond * 50)
 	}
