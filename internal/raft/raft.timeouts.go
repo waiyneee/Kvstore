@@ -66,7 +66,7 @@ func (rn *RaftNode) startCampaign(campaignTerm int64) {
 	if len(rn.peerIps) == 0 {
 		rn.state = Leader
 
-		cluster.ServerRole="Leader"
+		cluster.ServerRole="LEADER"
 	
 		log.Printf("[RAFT]---->Node %d is the new Leader for the term %d standlaone{node}", rn.id, rn.currentTerm)
 		rn.mu.Unlock()
@@ -116,7 +116,7 @@ func (rn *RaftNode) startCampaign(campaignTerm int64) {
 					default:
 				}
 
-				cluster.ServerRole="Leader"
+				cluster.ServerRole="FOLLOWER"
 				voteCh <- false
 				return
 			}
@@ -144,7 +144,7 @@ func (rn *RaftNode) startCampaign(campaignTerm int64) {
 			if votesReceived >= votesNeeded {
 				rn.state = Leader
 
-				cluster.ServerRole="Leader"
+				cluster.ServerRole="LEADER"
 				log.Printf("[RAFT] ---> NODE %d IS THE NEW LEADER FOR TERM %d! <---", rn.id, rn.currentTerm)
 
 				for _, p := range rn.peerIps {

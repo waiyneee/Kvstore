@@ -12,5 +12,5 @@ func (rn *RaftNode) GetLogEntry(index int64) *LogEntry {
 	if index > 0 && index <= int64(len(rn.log)) {
 		return rn.log[index-1]
 	}
-	return nil
+	return rn.log[index-1]
 }

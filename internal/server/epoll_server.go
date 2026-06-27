@@ -16,6 +16,7 @@ import (
 	"github.com/waiyneee/Kvstore/internal/resp"
 	"github.com/waiyneee/Kvstore/internal/store"
 	"github.com/waiyneee/Kvstore/internal/statebridge"
+	"github.com/waiyneee/Kvstore/internal/cluster"
 )
 
 var RaftBrain *raft.RaftNode
@@ -203,17 +204,34 @@ func (s *Server) startRaftApplierLoop() {
 			continue
 		}
 
+	//	log.Printf("[APPLIER] Pipeline triggered! commitIndex=%d, lastApplied=%d. Processing batch...", commitIndex, lastApplied)
+
 		for i := lastApplied + 1; i <= commitIndex; i++ {
 			entry := RaftBrain.GetLogEntry(i)
 			if entry == nil {
+				log.Printf("[APPLIER ERROR] Found nil log entry at index %d", i)
 				continue
 			}
-			tokens, _, err := resp.DecodeArrayString([]byte(entry.Command))
 
+			//log.Printf("[APPLIER] Decoding log index %d. Raw string payload: %q", i, entry.Command)
+
+
+			//if u re a leader u already processed that commands
+			// isnide processclientdata
+			
+			if cluster.ServerRole == "LEADER" {
+							lastApplied = i
+							continue
+			}
+			tokens, _, err := resp.DecodeArrayString([]byte(entry.Command))
 			if err != nil || len(tokens) == 0 {
+				
+				log.Printf("[APPLIER CRITICAL ERROR] Parsing failed at log index %d: %v (decoded tokens count: %d)", i, err, len(tokens))
 				lastApplied = i
 				continue
 			}
+
+			//log.Printf("[APPLIER SUCCESS] Applying command to Epoll dictionary: %v", tokens)
 
 			cmd := &commands.Command{
 				Cmd:  strings.ToUpper(tokens[0]),
