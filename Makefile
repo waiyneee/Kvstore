@@ -8,23 +8,23 @@ build:
 	@go build -o $(BINARY_NAME) $(CMD_DIR)
 	@echo "Build complete! Artifact created: ./$(BINARY_NAME)"
 
-# Testing a standalone node (No peers)
+# Testing a standalone node (No peers) with Task A1 config flags
 test-single: build
 	@echo "Booting a Standalone Node for Command Testing..."
-	./$(BINARY_NAME) start --node-id 1 --port 6379 --raft-port 10001 --peer-ips ""
+	./$(BINARY_NAME) start --node-id 1 --port 6379 --raft-port 10001 --peer-ips "" --max-clients 5000
 
-# 3-Node Cluster Setup (We can expand this to 5 later)
+# 3-Node Cluster Setup using Task A1 Dynamic Configuration flags
 node1: build
 	@echo "Booting Node 1 (Epoll: 6379, Raft: 10001)..."
-	./$(BINARY_NAME) start --node-id 1 --port 6379 --raft-port 10001 --peer-ips 127.0.0.1:10002,127.0.0.1:10003
+	./$(BINARY_NAME) start --node-id 1 --port 6379 --raft-port 10001 --peer-ips "127.0.0.1:10002,127.0.0.1:10003" --max-clients 5000
 
 node2: build
 	@echo "Booting Node 2 (Epoll: 6380, Raft: 10002)..."
-	./$(BINARY_NAME) start --node-id 2 --port 6380 --raft-port 10002 --peer-ips 127.0.0.1:10001,127.0.0.1:10003
+	./$(BINARY_NAME) start --node-id 2 --port 6380 --raft-port 10002 --peer-ips "127.0.0.1:10001,127.0.0.1:10003" --max-clients 5000
 
 node3: build
 	@echo "Booting Node 3 (Epoll: 6381, Raft: 10003)..."
-	./$(BINARY_NAME) start --node-id 3 --port 6381 --raft-port 10003 --peer-ips 127.0.0.1:10001,127.0.0.1:10002
+	./$(BINARY_NAME) start --node-id 3 --port 6381 --raft-port 10003 --peer-ips "127.0.0.1:10001,127.0.0.1:10002" --max-clients 5000
 
 test-ring:
 	@echo "Running Consistent Hashing Simulation..."
