@@ -2,8 +2,11 @@ package server
 
 import (
 	"log"
+	"os"
+	"os/signal"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -45,21 +48,53 @@ func (s *Server) Start() error {
 	if err != nil {
 		return err
 	}
-	defer unix.Close(s.serverFD)
 
 	s.epollFD, err = createEpoll()
 	if err != nil {
+		unix.Close(s.serverFD)
 		return err
 	}
-	defer unix.Close(s.epollFD)
-
 	connection.GlobalEpollFD = s.epollFD
 
 	if err := addEpollRead(s.epollFD, s.serverFD); err != nil {
+		unix.Close(s.serverFD)
+		unix.Close(s.epollFD)
 		return err
 	}
 
 	s.restoreAOF()
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigChan
+		log.Printf("[SHUTDOWN] Caught signal %v. Initiating graceful shutdown...", sig)
+		unix.Close(s.serverFD)
+
+		// Todos-->Loop through active clients and force-flush remaining write buffers
+		activeFDs := connection.GetActiveClientFDs()
+		log.Printf("[SHUTDOWN] Flushing write buffers for %d active clients...", len(activeFDs))
+		for _, fd := range activeFDs {
+			_, _ = connection.FlushWriteBuffer(fd)
+			delEpoll(s.epollFD, fd)
+			unix.Close(fd)
+			connection.CleanUpClient(fd)
+		}
+
+		//Close the epoll file descriptor instance yes
+		unix.Close(s.epollFD)
+
+		//Force-sync any remaining in-memory AOF buffer to physical disk
+		//its imp here
+		if err := persistence.SyncAOF(); err != nil {
+			log.Printf("[SHUTDOWN] Warning: Failed to sync AOF buffer to disk: %v", err)
+		} else {
+			log.Println("[SHUTDOWN] AOF buffer successfully flushed and synced to disk.")
+		}
+
+		log.Println("[SHUTDOWN] Server shutdown complete. Goodbye!")
+		os.Exit(0)
+	}()
+	// ---------------------------------we are done till here
 
 	eventsarr := make([]unix.EpollEvent, s.maxClients)
 	cronFrequency := 1 * time.Second
@@ -168,7 +203,6 @@ func (s *Server) cleanupClient(fd int) {
 	delEpoll(s.epollFD, fd)
 	unix.Close(fd)
 	connection.CleanUpClient(fd)
-
 }
 
 func (s *Server) restoreAOF() {
@@ -203,8 +237,6 @@ func (s *Server) startRaftApplierLoop() {
 			continue
 		}
 
-		//	log.Printf("[APPLIER] Pipeline triggered! commitIndex=%d, lastApplied=%d. Processing batch...", commitIndex, lastApplied)
-
 		for i := lastApplied + 1; i <= commitIndex; i++ {
 			entry := RaftBrain.GetLogEntry(i)
 			if entry == nil {
@@ -212,24 +244,16 @@ func (s *Server) startRaftApplierLoop() {
 				continue
 			}
 
-			//log.Printf("[APPLIER] Decoding log index %d. Raw string payload: %q", i, entry.Command)
-
-			//if u re a leader u already processed that commands
-			// isnide processclientdata
-
 			if cluster.ServerRole == "LEADER" {
 				lastApplied = i
 				continue
 			}
 			tokens, _, err := resp.DecodeArrayString([]byte(entry.Command))
 			if err != nil || len(tokens) == 0 {
-
 				log.Printf("[APPLIER CRITICAL ERROR] Parsing failed at log index %d: %v (decoded tokens count: %d)", i, err, len(tokens))
 				lastApplied = i
 				continue
 			}
-
-			//log.Printf("[APPLIER SUCCESS] Applying command to Epoll dictionary: %v", tokens)
 
 			cmd := &commands.Command{
 				Cmd:  strings.ToUpper(tokens[0]),

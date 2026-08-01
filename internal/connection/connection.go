@@ -4,19 +4,24 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Exported buffers so the server can parse incoming bytes
-var ClientBuffers = make(map[int][]byte)
-var OutboundBuffers = make(map[int][]byte)
-var GlobalReadBuffer = make([]byte, 4096)
-
-func QueueWrite(fd int, data []byte) {
-	if fd == -1 {
-		return
-	}
-	OutboundBuffers[fd] = append(OutboundBuffers[fd], data...)
+type ClientSession struct {
+	Inbound  []byte
+	Outbound []byte
 }
 
+// Single unified map replacing separate ClientBuffers and OutboundBuffers maps
+var Clients = make(map[int]*ClientSession)
+var GlobalReadBuffer = make([]byte, 4096)
 var GlobalEpollFD int
+
+// GetActiveClientFDs retrieves all active file descriptors for graceful shutdown
+func GetActiveClientFDs() []int {
+	fds := make([]int, 0, len(Clients))
+	for fd := range Clients {
+		fds = append(fds, fd)
+	}
+	return fds
+}
 
 func RegisterSocket(fd int) error {
 	event := unix.EpollEvent{
@@ -26,12 +31,25 @@ func RegisterSocket(fd int) error {
 	return unix.EpollCtl(GlobalEpollFD, unix.EPOLL_CTL_ADD, fd, &event)
 }
 
+func QueueWrite(fd int, data []byte) {
+	if fd == -1 {
+		return
+	}
+	session, exists := Clients[fd]
+	if !exists {
+		session = &ClientSession{}
+		Clients[fd] = session
+	}
+	session.Outbound = append(session.Outbound, data...)
+}
+
 func FlushWriteBuffer(fd int) (done bool, err error) {
-	if len(OutboundBuffers[fd]) == 0 {
+	session, exists := Clients[fd]
+	if !exists || len(session.Outbound) == 0 {
 		return true, nil // Nothing to write
 	}
 
-	n, err := unix.Write(fd, OutboundBuffers[fd])
+	n, err := unix.Write(fd, session.Outbound)
 	if err != nil {
 		if err == unix.EAGAIN || err == unix.EWOULDBLOCK {
 			return false, nil // OS buffer full, wait for EPOLLOUT
@@ -39,16 +57,15 @@ func FlushWriteBuffer(fd int) (done bool, err error) {
 		return false, err // Fatal network error
 	}
 
-	OutboundBuffers[fd] = OutboundBuffers[fd][n:]
+	session.Outbound = session.Outbound[n:]
 
-	if len(OutboundBuffers[fd]) == 0 {
-		return true, nil // We successfully flushed everything
+	if len(session.Outbound) == 0 {
+		return true, nil // Fully flushed
 	}
 
 	return false, nil
 }
 
 func CleanUpClient(fd int) {
-	delete(ClientBuffers, fd)
-	delete(OutboundBuffers, fd)
+	delete(Clients, fd)
 }

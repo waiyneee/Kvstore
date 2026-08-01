@@ -33,9 +33,14 @@ func ToUpperASCII(s string) string {
 	}
 	return string(b)
 }
-
 func ProcessClientData(fd int) error {
-	// 4KB tcp standard global buffer
+	// Ensure a session exists for this file descriptor
+	session, exists := connection.Clients[fd]
+	if !exists {
+		session = &connection.ClientSession{}
+		connection.Clients[fd] = session
+	}
+
 	for {
 		n, err := unix.Read(fd, connection.GlobalReadBuffer)
 		if err != nil {
@@ -49,11 +54,11 @@ func ProcessClientData(fd int) error {
 			return errors.New("client disconnected")
 		}
 
-		connection.ClientBuffers[fd] = append(connection.ClientBuffers[fd], connection.GlobalReadBuffer[:n]...)
+		session.Inbound = append(session.Inbound, connection.GlobalReadBuffer[:n]...)
 	}
 
-	for len(connection.ClientBuffers[fd]) > 0 {
-		tokens, consumedBytes, err := resp.DecodeArrayString(connection.ClientBuffers[fd])
+	for len(session.Inbound) > 0 {
+		tokens, consumedBytes, err := resp.DecodeArrayString(session.Inbound)
 
 		if err != nil {
 			errStr := err.Error()
@@ -72,13 +77,12 @@ func ProcessClientData(fd int) error {
 			Args: tokens[1:],
 		}
 
-		// Hand off to the bll
 		err = commands.ResponsewithCommand(cmd, fd)
 		if err != nil {
 			return err
 		}
 
-		connection.ClientBuffers[fd] = connection.ClientBuffers[fd][consumedBytes:]
+		session.Inbound = session.Inbound[consumedBytes:]
 	}
 
 	return nil
