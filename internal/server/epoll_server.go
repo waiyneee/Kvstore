@@ -8,15 +8,14 @@ import (
 
 	"golang.org/x/sys/unix"
 
-
+	"github.com/waiyneee/Kvstore/internal/cluster"
 	"github.com/waiyneee/Kvstore/internal/commands"
 	"github.com/waiyneee/Kvstore/internal/connection"
 	"github.com/waiyneee/Kvstore/internal/persistence"
 	"github.com/waiyneee/Kvstore/internal/raft"
 	"github.com/waiyneee/Kvstore/internal/resp"
-	"github.com/waiyneee/Kvstore/internal/store"
 	"github.com/waiyneee/Kvstore/internal/statebridge"
-	"github.com/waiyneee/Kvstore/internal/cluster"
+	"github.com/waiyneee/Kvstore/internal/store"
 )
 
 var RaftBrain *raft.RaftNode
@@ -204,7 +203,7 @@ func (s *Server) startRaftApplierLoop() {
 			continue
 		}
 
-	//	log.Printf("[APPLIER] Pipeline triggered! commitIndex=%d, lastApplied=%d. Processing batch...", commitIndex, lastApplied)
+		//	log.Printf("[APPLIER] Pipeline triggered! commitIndex=%d, lastApplied=%d. Processing batch...", commitIndex, lastApplied)
 
 		for i := lastApplied + 1; i <= commitIndex; i++ {
 			entry := RaftBrain.GetLogEntry(i)
@@ -215,17 +214,16 @@ func (s *Server) startRaftApplierLoop() {
 
 			//log.Printf("[APPLIER] Decoding log index %d. Raw string payload: %q", i, entry.Command)
 
-
 			//if u re a leader u already processed that commands
 			// isnide processclientdata
-			
+
 			if cluster.ServerRole == "LEADER" {
-							lastApplied = i
-							continue
+				lastApplied = i
+				continue
 			}
 			tokens, _, err := resp.DecodeArrayString([]byte(entry.Command))
 			if err != nil || len(tokens) == 0 {
-				
+
 				log.Printf("[APPLIER CRITICAL ERROR] Parsing failed at log index %d: %v (decoded tokens count: %d)", i, err, len(tokens))
 				lastApplied = i
 				continue

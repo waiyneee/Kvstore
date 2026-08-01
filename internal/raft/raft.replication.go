@@ -13,7 +13,7 @@ import (
 
 func (rn *RaftNode) replicateToPeer(peer string) {
 	// >>> BUG are s there using unsecyred
-	// //change it to secure 
+	// //change it to secure
 	conn, err := grpc.NewClient(peer, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Printf("[RAFT] Critical: Failed to establish persistent gRPC channel to %s: %v", peer, err)
@@ -69,8 +69,7 @@ func (rn *RaftNode) replicateToPeer(peer string) {
 				rn.currentTerm = res.Term
 				rn.state = Follower
 				rn.votedFor = -1
-				
-			
+
 				cluster.ServerRole = "FOLLOWER"
 			} else if rn.state == Leader && term == rn.currentTerm {
 				if res.Success {
@@ -87,13 +86,13 @@ func (rn *RaftNode) replicateToPeer(peer string) {
 			rn.mu.Unlock()
 		}
 
-		time.Sleep(time.Millisecond * 50) // Standard 50ms heartbeats 
+		time.Sleep(time.Millisecond * 50) // Standard 50ms heartbeats
 	}
 }
 
 func (rn *RaftNode) advanceCommitIndex() {
 	matches := make([]int, 0)
-	matches = append(matches, len(rn.log)) 
+	matches = append(matches, len(rn.log))
 	for _, peer := range rn.peerIps {
 		matches = append(matches, int(rn.matchIndex[peer]))
 	}

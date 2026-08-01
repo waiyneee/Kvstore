@@ -40,18 +40,17 @@ func CheckRedirect(key string, fd int) bool {
 		return false
 	}
 
-
 	if GlobalHashRing == nil || CurrAdd == "" {
 		return false
 	}
 
 	targetNode := GlobalHashRing.GetNode(key)
 	if targetNode != CurrAdd {
-		
+
 		slot := int(crc32.ChecksumIEEE([]byte(key)) % 16384)
 
-		// Format: -MOVED <slot> <ip:port>\r\n so that we can deiberately 
-		//move down to other nodes and push our data 
+		// Format: -MOVED <slot> <ip:port>\r\n so that we can deiberately
+		//move down to other nodes and push our data
 		redirectMsg := "-MOVED " + strconv.Itoa(slot) + " " + targetNode + "\r\n"
 		connection.QueueWrite(fd, []byte(redirectMsg))
 

@@ -20,7 +20,7 @@ func FastRESPEncode(tokens []string) string {
 	sb.Grow(capacity)
 
 	// Build the string manually
-	//in case of raft ::just this specific 
+	//in case of raft ::just this specific
 	//one is dealth without my resp
 	sb.WriteString("*")
 	sb.WriteString(strconv.Itoa(len(tokens)))

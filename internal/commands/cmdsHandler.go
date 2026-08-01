@@ -4,9 +4,7 @@ import (
 	"github.com/waiyneee/Kvstore/internal/cluster"
 	"github.com/waiyneee/Kvstore/internal/connection"
 	"github.com/waiyneee/Kvstore/internal/persistence"
-	"github.com/waiyneee/Kvstore/internal/statebridge" 
-
-	
+	"github.com/waiyneee/Kvstore/internal/statebridge"
 )
 
 type CommandHandler func(args []string, fd int) error
@@ -21,7 +19,6 @@ var registry = map[string]CommandHandler{
 	"BGREWRITEAOF": AppenAofFile,
 	"INCR":         ResponseIncr,
 	"INFO":         ResponseInfo,
-	
 }
 
 func ResponsewithCommand(cmd *Command, fd int) error {
@@ -59,7 +56,6 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 	}
 	err := handler(cmd.Args, fd)
 
-	
 	if err == nil && fd != -1 {
 		isValid := true
 		if (cmd.Cmd == "INCR" || cmd.Cmd == "DEL" || cmd.Cmd == "EXPIRE" || cmd.Cmd == "TTL") && len(cmd.Args) != 1 {
@@ -74,9 +70,8 @@ func ResponsewithCommand(cmd *Command, fd int) error {
 			persistence.AppendToAOF(fullCmd)
 			persistence.SyncAOF()
 
-			
 			if cluster.ServerRole == "LEADER" && statebridge.GlobalRaft != nil {
-				
+
 				raftCmdStr := statebridge.FastRESPEncode(fullCmd)
 				statebridge.GlobalRaft.SubmitCommand(raftCmdStr)
 			}
