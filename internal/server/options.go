@@ -29,6 +29,10 @@ func WithPeerIPs(ips []string) Option {
 	return func(s *Server) { s.peerIPs = ips }
 }
 
+func WithMaxClients(max int) Option {
+	return func(s *Server) { s.maxClients = max }
+}
+
 // New creates a Server
 func New(opts ...Option) *Server {
 	s := &Server{
